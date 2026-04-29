@@ -9,6 +9,7 @@ export default function Dashboard() {
     ConversationWithPreview[]
   >([]);
   const [activeId, setActiveId] = useState<number | null>(null);
+  const activeIdRef = useRef<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -33,8 +34,8 @@ export default function Dashboard() {
   const poll = useCallback(() => {
     if (document.hidden) return;
     fetchConversations();
-    if (activeId !== null) fetchMessages(activeId);
-  }, [activeId, fetchConversations, fetchMessages]);
+    if (activeIdRef.current !== null) fetchMessages(activeIdRef.current);
+  }, [fetchConversations, fetchMessages]);
 
   useEffect(() => {
     poll();
@@ -46,6 +47,7 @@ export default function Dashboard() {
 
   const handleSelectConversation = useCallback(
     (id: number) => {
+      activeIdRef.current = id;
       setActiveId(id);
       fetchMessages(id);
     },
@@ -54,25 +56,33 @@ export default function Dashboard() {
 
   const handleToggleMode = useCallback(
     async (id: number, mode: "AI" | "HUMAN") => {
-      await fetch(`/api/mode/${id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode }),
-      });
-      await fetchConversations();
+      try {
+        await fetch(`/api/mode/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode }),
+        });
+        await fetchConversations();
+      } catch {
+        // silent — UI will reflect real state on next poll
+      }
     },
     [fetchConversations]
   );
 
   const handleSendMessage = useCallback(
     async (id: number, content: string): Promise<boolean> => {
-      const res = await fetch(`/api/messages/${id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
-      if (res.ok) await fetchMessages(id);
-      return res.ok;
+      try {
+        const res = await fetch(`/api/messages/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        });
+        if (res.ok) await fetchMessages(id);
+        return res.ok;
+      } catch {
+        return false;
+      }
     },
     [fetchMessages]
   );
@@ -81,6 +91,7 @@ export default function Dashboard() {
     async (id: number) => {
       await fetch(`/api/conversations/${id}`, { method: "DELETE" });
       if (activeId === id) {
+        activeIdRef.current = null;
         setActiveId(null);
         setMessages([]);
       }

@@ -7,9 +7,9 @@ import ModeToggle from "./ModeToggle";
 interface Props {
   conversation: Conversation;
   messages: Message[];
-  onToggleMode: (id: number, mode: "AI" | "HUMAN") => void;
+  onToggleMode: (id: number, mode: "AI" | "HUMAN") => Promise<void>;
   onSendMessage: (id: number, content: string) => Promise<boolean>;
-  onDelete: (id: number) => void;
+  onDelete: (id: number) => Promise<void>;
 }
 
 export default function ConversationPanel({
@@ -31,9 +31,12 @@ export default function ConversationPanel({
   const handleSend = async () => {
     if (!input.trim() || sending) return;
     setSending(true);
-    const ok = await onSendMessage(conversation.id, input.trim());
-    if (ok) setInput("");
-    setSending(false);
+    try {
+      const ok = await onSendMessage(conversation.id, input.trim());
+      if (ok) setInput("");
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
