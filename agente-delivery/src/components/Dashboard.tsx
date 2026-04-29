@@ -89,13 +89,17 @@ export default function Dashboard() {
 
   const handleDeleteConversation = useCallback(
     async (id: number) => {
-      await fetch(`/api/conversations/${id}`, { method: "DELETE" });
-      if (activeId === id) {
-        activeIdRef.current = null;
-        setActiveId(null);
-        setMessages([]);
+      try {
+        await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+        if (activeId === id) {
+          activeIdRef.current = null;
+          setActiveId(null);
+          setMessages([]);
+        }
+        await fetchConversations();
+      } catch {
+        // silent — UI reflects real state on next poll
       }
-      await fetchConversations();
     },
     [activeId, fetchConversations]
   );
