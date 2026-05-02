@@ -9,22 +9,32 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "dev:all": "concurrently -n next,worker -c cyan,green \"npm run dev\" \"npm run worker:dev\"",
+    "worker:dev": "tsx watch src/worker/index.ts",
+    "worker:build": "tsc --project src/worker/tsconfig.json --outDir dist/worker",
+    "worker:start": "node dist/worker/index.js"
   },
   "dependencies": {
-    "next": "^15.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "better-sqlite3": "^11.0.0",
-    "openai": "^4.0.0"
+    "next": "^15.0.0",
+    "openai": "^4.0.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^20.0.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.0.0",
+    "concurrently": "^9.2.1",
     "tailwindcss": "^4.0.0",
-    "@tailwindcss/postcss": "^4.0.0"
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0"
   }
 }
