@@ -43,6 +43,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Si el proveedor activo es Baileys, los mensajes llegan por el socket del worker.
+  if (process.env.WHATSAPP_PROVIDER === 'baileys') {
+    return NextResponse.json({ ok: true });
+  }
+
   try {
     const body = JSON.parse(rawBody);
 
