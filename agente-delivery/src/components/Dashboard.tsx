@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { ConversationWithPreview, Message } from "@/types";
 import ConversationList from "./ConversationList";
 import ConversationPanel from "./ConversationPanel";
+import StatusWidget from './StatusWidget';
 
 export default function Dashboard() {
   const [conversations, setConversations] = useState<
@@ -120,16 +121,7 @@ export default function Dashboard() {
         <span className="font-semibold text-white text-sm">
           Mega Muebles & Sommiers — Dashboard WhatsApp
         </span>
-        <span
-          className="flex items-center gap-2 text-xs"
-          style={{ color: "#10b981" }}
-        >
-          <span
-            className="w-2 h-2 rounded-full"
-            style={{ background: "#10b981" }}
-          />
-          Conectado
-        </span>
+        <StatusWidget />
       </div>
 
       {/* Body below header */}
