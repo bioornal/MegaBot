@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConversationById, getMessages, insertMessage } from "@/lib/db";
-import { sendWhatsAppMessage } from "@/lib/ycloud";
+import { sendMessage } from "@/lib/send-message";
 
 interface Ctx {
   params: Promise<{ conversationId: string }>;
@@ -43,9 +43,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const message = insertMessage(id, "human", content.trim());
 
   try {
-    await sendWhatsAppMessage(convo.phone, content.trim());
+    await sendMessage(convo.phone, content.trim());
   } catch (err) {
-    console.error("[messages] Error enviando a YCloud:", err);
+    console.error("[messages] Error enviando mensaje:", err);
     return NextResponse.json(
       { error: "Error enviando mensaje a WhatsApp" },
       { status: 502 }
