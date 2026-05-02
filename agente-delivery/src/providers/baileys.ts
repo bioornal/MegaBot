@@ -11,7 +11,7 @@ import type { WhatsAppProvider, IncomingMessage, ProviderStatus } from './types'
 const PROVIDER: 'baileys' = 'baileys';
 
 function jidToPhone(jid: string): string {
-  return jid.split('@')[0];
+  return jid.split('@')[0].split(':')[0];
 }
 
 function phoneToJid(phone: string): string {
@@ -25,6 +25,7 @@ export class BaileysProvider implements WhatsAppProvider {
   private handler: ((msg: IncomingMessage) => Promise<void>) | null = null;
   private reconnectDelay = 1000;
   private stopped = false;
+  private cachedVersion: [number, number, number] | null = null;
   private readonly authDir: string;
 
   constructor() {
@@ -51,6 +52,18 @@ export class BaileysProvider implements WhatsAppProvider {
     await this.connect();
   }
 
+  private async getVersion(): Promise<[number, number, number]> {
+    if (this.cachedVersion) return this.cachedVersion;
+    try {
+      const { version } = await fetchLatestBaileysVersion();
+      this.cachedVersion = version;
+      return version;
+    } catch {
+      console.warn('[baileys] No se pudo obtener versión remota, usando fallback');
+      return [2, 3000, 0];
+    }
+  }
+
   async stop(): Promise<void> {
     this.stopped = true;
     this.sock?.end(undefined);
@@ -67,10 +80,12 @@ export class BaileysProvider implements WhatsAppProvider {
   }
 
   private async connect(): Promise<void> {
+    if (this.stopped) return;
+
     await fs.mkdir(this.authDir, { recursive: true });
 
     const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
-    const { version } = await fetchLatestBaileysVersion();
+    const version = await this.getVersion();
 
     this.status = 'connecting';
     console.log(`[baileys] Conectando con versión ${version.join('.')}...`);
@@ -101,19 +116,34 @@ export class BaileysProvider implements WhatsAppProvider {
 
       if (connection === 'close') {
         const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
-        const loggedOut = reason === DisconnectReason.loggedOut;
 
-        if (loggedOut) {
-          console.log('[baileys] Sesión cerrada (logout) — borrando credenciales y reiniciando QR...');
+        const shouldClearCreds =
+          reason === DisconnectReason.loggedOut ||
+          reason === DisconnectReason.badSession;
+
+        if (shouldClearCreds) {
+          console.log(`[baileys] Borrando credenciales (código ${reason}) — reiniciando QR...`);
           await fs.rm(this.authDir, { recursive: true, force: true });
           this.reconnectDelay = 1000;
-        } else {
+        }
+
+        if (reason === DisconnectReason.forbidden) {
+          console.error('[baileys] Cuenta prohibida (403) — deteniendo permanentemente.');
+          this.stopped = true;
+          this.status = 'error';
+          return;
+        }
+
+        if (!shouldClearCreds) {
           console.log(`[baileys] Conexión cerrada (código ${reason}) — reconectando en ${this.reconnectDelay}ms...`);
         }
 
         if (!this.stopped) {
           this.status = 'connecting';
-          setTimeout(() => this.connect(), this.reconnectDelay);
+          setTimeout(() => this.connect().catch((err) => {
+            console.error('[baileys] Error en reconexión:', err);
+            this.status = 'error';
+          }), this.reconnectDelay);
           this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30_000);
         }
       }
@@ -124,6 +154,7 @@ export class BaileysProvider implements WhatsAppProvider {
 
       for (const msg of messages) {
         if (msg.key.fromMe || !msg.message) continue;
+        if (msg.key.remoteJid?.endsWith('@g.us')) continue;
 
         const text =
           msg.message.conversation ||
