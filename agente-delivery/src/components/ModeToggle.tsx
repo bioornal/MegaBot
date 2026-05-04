@@ -22,28 +22,38 @@ export default function ModeToggle({ mode, conversationId, onToggle }: Props) {
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs" style={{ color: "#8b949e" }}>
-        Modo:
-      </span>
-      <button
-        onClick={handleClick}
-        disabled={pending}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all"
+    <button
+      onClick={handleClick}
+      disabled={pending}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 7,
+        padding: "6px 12px",
+        borderRadius: 8,
+        fontSize: 12,
+        fontWeight: 600,
+        background: isAI ? "#0a2218" : "#201400",
+        color: isAI ? "#22d986" : "#f59e0b",
+        border: `1px solid ${isAI ? "#153a26" : "#503208"}`,
+        cursor: pending ? "not-allowed" : "pointer",
+        opacity: pending ? 0.5 : 1,
+        letterSpacing: "0.02em",
+        minWidth: 130,
+        justifyContent: "center",
+      }}
+    >
+      <span
         style={{
-          background: isAI ? "#064e3b" : "#78350f",
-          color: isAI ? "#10b981" : "#f59e0b",
-          border: `2px solid ${isAI ? "#10b981" : "#f59e0b"}`,
-          cursor: pending ? "not-allowed" : "pointer",
-          opacity: pending ? 0.6 : 1,
+          width: 7,
+          height: 7,
+          borderRadius: "50%",
+          background: isAI ? "#22d986" : "#f59e0b",
+          flexShrink: 0,
+          boxShadow: `0 0 6px ${isAI ? "rgba(34,217,134,0.5)" : "rgba(245,158,11,0.5)"}`,
         }}
-      >
-        <span
-          className="w-2.5 h-2.5 rounded-full"
-          style={{ background: isAI ? "#10b981" : "#f59e0b" }}
-        />
-        {isAI ? "IA — Automático" : "HUMANO — Manual"}
-      </button>
-    </div>
+      />
+      {isAI ? "IA automático" : "Humano manual"}
+    </button>
   );
 }

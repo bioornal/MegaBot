@@ -28,12 +28,19 @@ db.exec(`
     conversation_id  INTEGER NOT NULL REFERENCES conversations(id),
     role             TEXT CHECK(role IN ('user','assistant','human')) NOT NULL,
     content          TEXT NOT NULL,
+    media_url        TEXT,
     created_at       INTEGER NOT NULL DEFAULT (unixepoch())
   );
 
   CREATE INDEX IF NOT EXISTS idx_messages_conv
     ON messages(conversation_id, created_at);
 `);
+
+try {
+  db.exec(`ALTER TABLE messages ADD COLUMN media_url TEXT;`);
+} catch (err) {
+  // Column already exists
+}
 
 const stmts = {
   upsertConversation: db.prepare(`
@@ -49,12 +56,13 @@ const stmts = {
   ),
   listConversations: db.prepare(`
     SELECT c.*,
-      (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_preview
+      (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_preview,
+      (SELECT role FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_role
     FROM conversations c
     ORDER BY COALESCE(c.last_message_at, 0) DESC
   `),
   insertMessage: db.prepare(`
-    INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)
+    INSERT INTO messages (conversation_id, role, content, media_url) VALUES (?, ?, ?, ?)
     RETURNING *
   `),
   updateLastMessageAt: db.prepare(
@@ -68,6 +76,9 @@ const stmts = {
   `),
   deleteMessages: db.prepare(
     `DELETE FROM messages WHERE conversation_id = ?`
+  ),
+  getConversationByPhone: db.prepare(
+    `SELECT * FROM conversations WHERE phone = ? OR phone LIKE ? LIMIT 1`
   ),
   deleteConversation: db.prepare(
     `DELETE FROM conversations WHERE id = ?`
@@ -86,11 +97,12 @@ export function getConversationById(id: number): Conversation | null {
 }
 
 const insertMessageTx = db.transaction(
-  (conversationId: number, role: string, content: string): Message => {
+  (conversationId: number, role: string, content: string, mediaUrl: string | null): Message => {
     const msg = stmts.insertMessage.get(
       conversationId,
       role,
-      content
+      content,
+      mediaUrl
     ) as Message;
     stmts.updateLastMessageAt.run(conversationId);
     return msg;
@@ -100,9 +112,10 @@ const insertMessageTx = db.transaction(
 export function insertMessage(
   conversationId: number,
   role: "user" | "assistant" | "human",
-  content: string
+  content: string,
+  mediaUrl: string | null = null
 ): Message {
-  return insertMessageTx(conversationId, role, content);
+  return insertMessageTx(conversationId, role, content, mediaUrl);
 }
 
 export function getMessages(
@@ -141,4 +154,13 @@ const deleteConversationTx = db.transaction((id: number) => {
 
 export function deleteConversation(id: number): void {
   deleteConversationTx(id);
+}
+
+export function clearMessages(conversationId: number): void {
+  stmts.deleteMessages.run(conversationId);
+}
+
+export function getConversationByPhone(phone: string): Conversation | null {
+  const digits = phone.replace(/\D/g, '');
+  return (stmts.getConversationByPhone.get(digits, `${digits}@%`) as Conversation) ?? null;
 }

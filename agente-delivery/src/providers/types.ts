@@ -10,11 +10,17 @@ export type ProviderStatus =
 export interface IncomingMessage {
   provider: ProviderName;
   externalMessageId: string;
-  from: string;        // E.164 sin +: "5491112345678"
-  to: string;          // número del bot
+  from: string; // E.164 sin + o JID de WhatsApp: "549..." / "...@lid"
+  to: string; // número/JID del bot
   text: string;
-  timestamp: number;   // unix epoch segundos
+  timestamp: number; // unix epoch segundos
   senderName?: string; // nombre del contacto si está disponible
+  fromMe?: boolean; // enviado por el operador desde dispositivo vinculado
+  isSelfChat?: boolean; // el destinatario es el propio número del bot (chat de control)
+  mediaType?: 'audio' | 'voice' | 'image' | 'video' | 'document';
+  mediaUrl?: string;
+  mediaMimeType?: string;
+  originalText?: string;
   rawPayload: unknown;
 }
 

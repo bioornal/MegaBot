@@ -1,20 +1,22 @@
-'use client';
-import { useEffect, useState } from 'react';
-import QRCode from 'qrcode';
+"use client";
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 
 interface StatusData {
-  status: 'connecting' | 'connected' | 'disconnected' | 'waiting_qr' | 'error';
+  status: "connecting" | "connected" | "disconnected" | "waiting_qr" | "error";
   provider: string;
   qr?: string | null;
   error?: string;
 }
 
+const STATUS_POLL_INTERVAL_MS = 10_000;
+
 const STATUS_CONFIG = {
-  connected:     { color: '#10b981', label: 'Conectado' },
-  connecting:    { color: '#f59e0b', label: 'Conectando…' },
-  waiting_qr:    { color: '#3b82f6', label: 'Esperando QR' },
-  disconnected:  { color: '#ef4444', label: 'Desconectado' },
-  error:         { color: '#ef4444', label: 'Error' },
+  connected: { color: "#22d986", label: "Conectado" },
+  connecting: { color: "#f59e0b", label: "Conectando..." },
+  waiting_qr: { color: "#3b82f6", label: "Esperando QR" },
+  disconnected: { color: "#ef4444", label: "Desconectado" },
+  error: { color: "#ef4444", label: "Error" },
 } as const;
 
 export default function StatusWidget() {
@@ -27,16 +29,19 @@ export default function StatusWidget() {
 
     async function poll() {
       try {
-        const res = await fetch('/api/status', { cache: 'no-store' });
+        const res = await fetch("/api/status", { cache: "no-store" });
         if (res.ok && !cancelled) setData(await res.json());
       } catch {
-        // silencioso — UI ya muestra "desconectado"
+        // silent
       }
     }
 
     poll();
-    const id = setInterval(poll, 3000);
-    return () => { cancelled = true; clearInterval(id); };
+    const id = setInterval(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   useEffect(() => {
@@ -55,57 +60,84 @@ export default function StatusWidget() {
   const cfg = STATUS_CONFIG[data.status] ?? STATUS_CONFIG.disconnected;
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: "relative" }}>
       <button
-        onClick={() => data.status === 'waiting_qr' && setShowQr((v) => !v)}
+        onClick={() => data.status === "waiting_qr" && setShowQr((v) => !v)}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          background: 'none',
-          border: 'none',
-          cursor: data.status === 'waiting_qr' ? 'pointer' : 'default',
-          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+          background: "#111a25",
+          border: "1px solid #1c2836",
+          borderRadius: 8,
+          cursor: data.status === "waiting_qr" ? "pointer" : "default",
+          padding: "6px 11px",
         }}
-        title={data.status === 'waiting_qr' ? 'Click para ver el QR' : undefined}
+        title={data.status === "waiting_qr" ? "Click para ver el QR" : undefined}
       >
         <span
           style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
             background: cfg.color,
-            display: 'inline-block',
+            display: "inline-block",
             flexShrink: 0,
+            boxShadow: `0 0 6px ${cfg.color}88`,
           }}
         />
-        <span style={{ color: cfg.color, fontSize: 12, whiteSpace: 'nowrap' }}>
+        <span
+          style={{
+            color: cfg.color,
+            fontSize: 12,
+            whiteSpace: "nowrap",
+            fontWeight: 500,
+          }}
+        >
           {cfg.label}
           {data.provider && ` · ${data.provider}`}
-          {data.status === 'waiting_qr' && ' (click para QR)'}
+          {data.status === "waiting_qr" && " (click para QR)"}
         </span>
       </button>
 
       {showQr && qrDataUrl && (
         <div
           style={{
-            position: 'absolute',
-            top: '100%',
+            position: "absolute",
+            top: "100%",
             right: 0,
             marginTop: 8,
-            background: '#161b22',
-            border: '1px solid #30363d',
-            borderRadius: 8,
-            padding: 12,
+            background: "#0d1219",
+            border: "1px solid #1c2836",
+            borderRadius: 12,
+            padding: 14,
             zIndex: 50,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
           }}
         >
-          <p style={{ color: '#8b949e', fontSize: 11, marginBottom: 8, textAlign: 'center' }}>
+          <p
+            style={{
+              color: "#3d5268",
+              fontSize: 11,
+              marginBottom: 10,
+              textAlign: "center",
+            }}
+          >
             Escaneá con WhatsApp → Dispositivos vinculados
           </p>
-          <img src={qrDataUrl} alt="QR WhatsApp" style={{ display: 'block', borderRadius: 4 }} />
-          <p style={{ color: '#6e7681', fontSize: 10, marginTop: 6, textAlign: 'center' }}>
+          <img
+            src={qrDataUrl}
+            alt="QR WhatsApp"
+            style={{ display: "block", borderRadius: 6 }}
+          />
+          <p
+            style={{
+              color: "#2e4258",
+              fontSize: 10,
+              marginTop: 8,
+              textAlign: "center",
+            }}
+          >
             El QR se actualiza cada ~20s
           </p>
         </div>

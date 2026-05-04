@@ -4,12 +4,40 @@ import type { Conversation, Message } from "@/types";
 import MessageBubble from "./MessageBubble";
 import ModeToggle from "./ModeToggle";
 
+const AVATAR_PALETTES = [
+  { bg: "#152040", fg: "#5090e0" },
+  { bg: "#102830", fg: "#30b898" },
+  { bg: "#1e1238", fg: "#9060d8" },
+  { bg: "#280c18", fg: "#d05878" },
+  { bg: "#201600", fg: "#c89030" },
+  { bg: "#0e2218", fg: "#38b068" },
+  { bg: "#240a10", fg: "#c84050" },
+  { bg: "#001828", fg: "#2878be" },
+];
+
+function avatarPalette(str: string) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++)
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_PALETTES[Math.abs(hash) % AVATAR_PALETTES.length];
+}
+
+function getInitials(name: string | null, phone: string): string {
+  if (name) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  }
+  return phone.replace(/\D/g, "").slice(-2);
+}
+
 interface Props {
   conversation: Conversation;
   messages: Message[];
   onToggleMode: (id: number, mode: "AI" | "HUMAN") => Promise<void>;
   onSendMessage: (id: number, content: string) => Promise<boolean>;
   onDelete: (id: number) => Promise<void>;
+  onResetMemory: (id: number) => Promise<void>;
 }
 
 export default function ConversationPanel({
@@ -18,10 +46,12 @@ export default function ConversationPanel({
   onToggleMode,
   onSendMessage,
   onDelete,
+  onResetMemory,
 }: Props) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,40 +76,145 @@ export default function ConversationPanel({
     }
   };
 
+  const palette = avatarPalette(conversation.phone);
+  const initials = getInitials(conversation.name, conversation.phone);
+
   return (
     <div
-      className="flex flex-col h-full"
-      style={{ background: "#1c2128" }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        background: "#0d1219",
+      }}
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
-        style={{ borderColor: "#30363d" }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: "14px 20px",
+          borderBottom: "1px solid #1c2836",
+          flexShrink: 0,
+          background: "#0d1219",
+        }}
       >
-        <div>
-          <div className="font-semibold text-white">
-            {conversation.name ?? conversation.phone}
-          </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            minWidth: 0,
+          }}
+        >
           <div
-            className="text-xs font-mono"
-            style={{ color: "#8b949e" }}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 11,
+              background: palette.bg,
+              border: "1px solid #1a2838",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              fontSize: 13,
+              fontWeight: 600,
+              color: palette.fg,
+              letterSpacing: "0.03em",
+            }}
           >
-            {conversation.phone}
+            {initials}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#e8f0f8",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                lineHeight: 1.3,
+              }}
+            >
+              {conversation.name ?? conversation.phone}
+            </div>
+            {conversation.name && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#3d5268",
+                  fontFamily:
+                    "var(--font-mono, 'JetBrains Mono', monospace)",
+                  marginTop: 2,
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {conversation.phone}
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexShrink: 0,
+          }}
+        >
           <ModeToggle
             mode={conversation.mode}
             conversationId={conversation.id}
             onToggle={onToggleMode}
           />
           <button
-            onClick={() => setShowConfirm(true)}
-            className="text-xs px-2 py-1 rounded transition-colors"
+            onClick={() => setShowResetConfirm(true)}
+            title="Borrar historial — la IA olvidará todo sobre este cliente"
             style={{
-              color: "#f85149",
-              border: "1px solid #f85149",
+              fontSize: 12,
+              padding: "6px 12px",
+              borderRadius: 7,
+              color: "#f59e0b",
+              border: "1px solid #3a2a00",
+              background: "transparent",
               cursor: "pointer",
+              fontWeight: 500,
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background = "#1a1200";
+              (e.currentTarget as HTMLElement).style.borderColor = "#6a4a00";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = "transparent";
+              (e.currentTarget as HTMLElement).style.borderColor = "#3a2a00";
+            }}
+          >
+            Resetear IA
+          </button>
+          <button
+            onClick={() => setShowConfirm(true)}
+            style={{
+              fontSize: 12,
+              padding: "6px 12px",
+              borderRadius: 7,
+              color: "#ef4444",
+              border: "1px solid #3a1818",
+              background: "transparent",
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background = "#1a0808";
+              (e.currentTarget as HTMLElement).style.borderColor = "#6a2020";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = "transparent";
+              (e.currentTarget as HTMLElement).style.borderColor = "#3a1818";
             }}
           >
             Borrar
@@ -88,19 +223,27 @@ export default function ConversationPanel({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
         {conversation.mode === "AI" && (
           <div
-            className="text-center text-xs mb-3 py-2 rounded"
-            style={{ background: "#0d2219", color: "#10b981" }}
+            style={{
+              textAlign: "center",
+              fontSize: 11.5,
+              marginBottom: 16,
+              padding: "6px 14px",
+              borderRadius: 8,
+              background: "#0a2218",
+              border: "1px solid #153a26",
+              color: "#22d986",
+              letterSpacing: "0.02em",
+            }}
           >
-            El bot responde automáticamente
+            Bot respondiendo automáticamente · modo IA activo
           </div>
         )}
         {messages.length === 0 && (
           <div
-            className="text-center text-sm mt-8"
-            style={{ color: "#8b949e" }}
+            style={{ textAlign: "center", fontSize: 13, marginTop: 40, color: "#3d5268" }}
           >
             Sin mensajes aún
           </div>
@@ -113,78 +256,225 @@ export default function ConversationPanel({
 
       {/* Input */}
       <div
-        className="flex-shrink-0 px-4 py-3 border-t"
-        style={{ borderColor: "#30363d" }}
+        style={{
+          flexShrink: 0,
+          padding: "14px 20px",
+          borderTop: "1px solid #1c2836",
+          background: "#090e14",
+        }}
       >
         {conversation.mode === "HUMAN" ? (
-          <div className="flex gap-2 items-end">
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Escribí tu respuesta... (Enter para enviar, Shift+Enter nueva línea)"
               rows={2}
-              className="flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none"
               style={{
-                background: "#21262d",
-                color: "#e6edf3",
-                border: "1px solid #30363d",
+                flex: 1,
+                resize: "none",
+                borderRadius: 10,
+                padding: "10px 14px",
+                fontSize: 13,
+                outline: "none",
+                background: "#0d1219",
+                color: "#e8f0f8",
+                border: "1px solid #1c2836",
+                minHeight: 46,
+                maxHeight: 120,
+                lineHeight: 1.55,
+                fontFamily: "inherit",
+              }}
+              onFocus={(e) => {
+                (e.target as HTMLElement).style.borderColor = "#253a50";
+              }}
+              onBlur={(e) => {
+                (e.target as HTMLElement).style.borderColor = "#1c2836";
               }}
             />
             <button
               onClick={handleSend}
               disabled={sending || !input.trim()}
-              className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
               style={{
+                padding: "10px 18px",
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 600,
                 background:
-                  sending || !input.trim() ? "#21262d" : "#10b981",
-                color:
-                  sending || !input.trim() ? "#8b949e" : "#000",
-                cursor:
-                  sending || !input.trim() ? "not-allowed" : "pointer",
+                  sending || !input.trim()
+                    ? "#111a25"
+                    : "linear-gradient(140deg, #22d986 0%, #10b060 100%)",
+                color: sending || !input.trim() ? "#3d5268" : "#04130a",
+                border: "none",
+                cursor: sending || !input.trim() ? "not-allowed" : "pointer",
+                flexShrink: 0,
+                boxShadow:
+                  sending || !input.trim()
+                    ? "none"
+                    : "0 4px 14px rgba(34,217,134,0.25)",
               }}
             >
-              {sending ? "..." : "Enviar"}
+              {sending ? "···" : "Enviar"}
             </button>
           </div>
         ) : (
           <div
-            className="text-center text-xs py-2"
-            style={{ color: "#8b949e" }}
+            style={{
+              textAlign: "center",
+              fontSize: 12,
+              padding: "8px 0",
+              color: "#3d5268",
+            }}
           >
             Cambiá a modo HUMANO para responder manualmente
           </div>
         )}
       </div>
 
-      {/* Delete confirmation modal */}
-      {showConfirm && (
+      {/* Reset memory confirm modal */}
+      {showResetConfirm && (
         <div
-          className="fixed inset-0 flex items-center justify-center z-50"
-          style={{ background: "rgba(0,0,0,0.75)" }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+            background: "rgba(0,0,0,0.72)",
+            backdropFilter: "blur(4px)",
+          }}
         >
           <div
-            className="rounded-xl p-6 w-80"
             style={{
-              background: "#161b22",
-              border: "1px solid #30363d",
+              borderRadius: 14,
+              padding: "24px",
+              width: 320,
+              background: "#0d1219",
+              border: "1px solid #1c2836",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
             }}
           >
-            <h3 className="font-semibold text-white mb-2">
+            <h3
+              style={{
+                fontWeight: 600,
+                color: "#e8f0f8",
+                marginBottom: 8,
+                fontSize: 15,
+              }}
+            >
+              ¿Resetear memoria de la IA?
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                marginBottom: 20,
+                color: "#4a6278",
+                lineHeight: 1.55,
+              }}
+            >
+              Se borrará todo el historial de mensajes. Sofía olvidará la conversación y arrancará de cero con este cliente. La conversación seguirá apareciendo en la lista.
+            </p>
+            <div
+              style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}
+            >
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  background: "#111a25",
+                  color: "#c0d0e0",
+                  border: "1px solid #1c2836",
+                  cursor: "pointer",
+                  fontWeight: 500,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  onResetMemory(conversation.id);
+                }}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  background: "#f59e0b",
+                  color: "#1a0e00",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                Resetear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm modal */}
+      {showConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+            background: "rgba(0,0,0,0.72)",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <div
+            style={{
+              borderRadius: 14,
+              padding: "24px",
+              width: 320,
+              background: "#0d1219",
+              border: "1px solid #1c2836",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
+            }}
+          >
+            <h3
+              style={{
+                fontWeight: 600,
+                color: "#e8f0f8",
+                marginBottom: 8,
+                fontSize: 15,
+              }}
+            >
               ¿Borrar conversación?
             </h3>
-            <p className="text-sm mb-4" style={{ color: "#8b949e" }}>
-              Se eliminan todos los mensajes. Esta acción no se puede
-              deshacer.
+            <p
+              style={{
+                fontSize: 13,
+                marginBottom: 20,
+                color: "#4a6278",
+                lineHeight: 1.55,
+              }}
+            >
+              Se eliminan todos los mensajes. Esta acción no se puede deshacer.
             </p>
-            <div className="flex gap-2 justify-end">
+            <div
+              style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}
+            >
               <button
                 onClick={() => setShowConfirm(false)}
-                className="px-3 py-1.5 rounded text-sm"
                 style={{
-                  background: "#21262d",
-                  color: "#e6edf3",
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  background: "#111a25",
+                  color: "#c0d0e0",
+                  border: "1px solid #1c2836",
                   cursor: "pointer",
+                  fontWeight: 500,
                 }}
               >
                 Cancelar
@@ -194,10 +484,14 @@ export default function ConversationPanel({
                   setShowConfirm(false);
                   onDelete(conversation.id);
                 }}
-                className="px-3 py-1.5 rounded text-sm font-semibold"
                 style={{
-                  background: "#f85149",
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  background: "#ef4444",
                   color: "#fff",
+                  border: "none",
                   cursor: "pointer",
                 }}
               >

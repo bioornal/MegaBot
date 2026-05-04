@@ -4,8 +4,10 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
+import { transcribeAudioBuffer } from '../lib/openai';
 import type { WhatsAppProvider, IncomingMessage, ProviderStatus } from './types';
 
 const PROVIDER: 'baileys' = 'baileys';
@@ -14,8 +16,32 @@ function jidToPhone(jid: string): string {
   return jid.split('@')[0].split(':')[0];
 }
 
-function phoneToJid(phone: string): string {
-  return phone.replace(/[^\d]/g, '') + '@s.whatsapp.net';
+function contactToJid(contact: string): string {
+  if (contact.includes('@')) return contact;
+  return contact.replace(/[^\d]/g, '') + '@s.whatsapp.net';
+}
+
+async function transcribeBaileysAudioMessage(message: any): Promise<{
+  text: string;
+  mediaType: 'audio' | 'voice';
+  mediaMimeType?: string;
+} | null> {
+  const audioMessage = message.message?.audioMessage;
+  if (!audioMessage) return null;
+
+  const buffer = await downloadMediaMessage(message, 'buffer', {});
+  const mediaType = audioMessage.ptt ? 'voice' : 'audio';
+  const mediaMimeType = audioMessage.mimetype ?? undefined;
+  const fileName = mediaMimeType?.includes('ogg')
+    ? 'audio.ogg'
+    : mediaMimeType?.includes('mpeg')
+      ? 'audio.mp3'
+      : 'audio.bin';
+
+  const text = await transcribeAudioBuffer(Buffer.from(buffer), fileName);
+  return text
+    ? { text, mediaType, mediaMimeType }
+    : null;
 }
 
 export class BaileysProvider implements WhatsAppProvider {
@@ -76,7 +102,7 @@ export class BaileysProvider implements WhatsAppProvider {
     if (!this.sock || this.status !== 'connected') {
       throw new Error(`[baileys] No se puede enviar: estado es "${this.status}"`);
     }
-    await this.sock.sendMessage(phoneToJid(to), { text });
+    await this.sock.sendMessage(contactToJid(to), { text });
   }
 
   private async connect(): Promise<void> {
@@ -153,17 +179,49 @@ export class BaileysProvider implements WhatsAppProvider {
       if (type !== 'notify') return;
 
       for (const msg of messages) {
-        if (msg.key.fromMe || !msg.message) continue;
+        if (!msg.message) continue;
         if (msg.key.remoteJid?.endsWith('@g.us')) continue;
 
-        const text =
+        let text =
           msg.message.conversation ||
           msg.message.extendedTextMessage?.text ||
+          msg.message.imageMessage?.caption ||
           '';
-        if (!text.trim()) continue;
 
-        const from = jidToPhone(msg.key.remoteJid ?? '');
-        const to = jidToPhone(this.sock?.user?.id ?? '');
+        let mediaType: 'audio' | 'voice' | 'image' | undefined;
+        let mediaMimeType: string | undefined;
+        let mediaUrl: string | undefined;
+
+        if (!text.trim() && msg.message.audioMessage) {
+          try {
+            const transcript = await transcribeBaileysAudioMessage(msg);
+            if (transcript) {
+              text = transcript.text;
+              mediaType = transcript.mediaType;
+              mediaMimeType = transcript.mediaMimeType;
+            }
+          } catch (err) {
+            console.error('[baileys] Error transcribiendo audio:', err);
+          }
+        } else if (msg.message.imageMessage) {
+          try {
+            const buffer = await downloadMediaMessage(msg, 'buffer', {});
+            const mimetype = msg.message.imageMessage.mimetype || 'image/jpeg';
+            mediaUrl = `data:${mimetype};base64,${buffer.toString('base64')}`;
+            mediaType = 'image';
+            mediaMimeType = mimetype;
+          } catch (err) {
+            console.error('[baileys] Error descargando imagen:', err);
+          }
+        }
+
+        if (!text.trim() && !mediaUrl) continue;
+
+        const fromMe = msg.key.fromMe ?? false;
+        const remoteJid = msg.key.remoteJid ?? '';
+        const selfPhone = jidToPhone(this.sock?.user?.id ?? '');
+        const isSelfChat = jidToPhone(remoteJid) === selfPhone;
+
         const externalMessageId = msg.key.id ?? '';
         const timestamp =
           typeof msg.messageTimestamp === 'number'
@@ -173,17 +231,23 @@ export class BaileysProvider implements WhatsAppProvider {
         const normalized: IncomingMessage = {
           provider: PROVIDER,
           externalMessageId,
-          from,
-          to,
+          from: remoteJid,
+          to: selfPhone,
           text: text.trim(),
           timestamp,
-          senderName: msg.pushName ?? undefined,
+          senderName: fromMe ? undefined : (msg.pushName ?? undefined),
+          fromMe,
+          isSelfChat,
+          mediaType,
+          mediaUrl,
+          mediaMimeType,
+          originalText: msg.message.audioMessage ? '[audio]' : (msg.message.imageMessage ? '[imagen]' : undefined),
           rawPayload: msg,
         };
 
         if (this.handler) {
           await this.handler(normalized).catch((err) => {
-            console.error('[baileys] Error procesando mensaje entrante:', err);
+            console.error('[baileys] Error procesando mensaje:', err);
           });
         }
       }

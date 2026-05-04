@@ -18,33 +18,74 @@ export default function MessageBubble({ message }: Props) {
 
   return (
     <div
-      className={`flex mb-3 ${isUser ? "justify-start" : "justify-end"}`}
+      style={{
+        display: "flex",
+        marginBottom: 10,
+        justifyContent: isUser ? "flex-start" : "flex-end",
+      }}
     >
       <div
-        className="max-w-xs lg:max-w-md px-4 py-2 rounded-2xl"
         style={{
+          maxWidth: "72%",
+          padding: "10px 14px 8px",
+          borderRadius: isUser
+            ? "4px 14px 14px 14px"
+            : "14px 4px 14px 14px",
           background: isUser
-            ? "#21262d"
+            ? "#111e2c"
             : isAssistant
-            ? "#064e3b"
-            : "#78350f",
-          color: "#e6edf3",
+            ? "#0c2a1e"
+            : "#251600",
+          border: `1px solid ${
+            isUser ? "#1e3045" : isAssistant ? "#1a4530" : "#5a3a0a"
+          }`,
+          color: "#e8f0f8",
         }}
       >
         {isHuman && (
           <div
-            className="text-xs font-semibold mb-1"
-            style={{ color: "#f59e0b" }}
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              marginBottom: 5,
+              color: "#f59e0b",
+              letterSpacing: "0.06em",
+            }}
           >
-            Operador
+            OPERADOR
           </div>
         )}
-        <p className="text-sm whitespace-pre-wrap break-words">
+        {isAssistant && (
+          <div
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              marginBottom: 5,
+              color: "#22d986",
+              letterSpacing: "0.06em",
+            }}
+          >
+            MEGABOT
+          </div>
+        )}
+        <p
+          style={{
+            fontSize: 13,
+            lineHeight: 1.55,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
           {message.content}
         </p>
         <div
-          className="text-xs mt-1 text-right"
-          style={{ color: "#8b949e" }}
+          style={{
+            fontSize: 10.5,
+            marginTop: 5,
+            textAlign: "right",
+            color: "#2e4258",
+            fontFamily: "var(--font-mono, monospace)",
+          }}
         >
           {formatTime(message.created_at)}
         </div>

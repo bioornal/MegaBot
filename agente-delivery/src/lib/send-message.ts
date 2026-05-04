@@ -4,7 +4,9 @@ export async function sendMessage(to: string, text: string): Promise<void> {
   const provider = process.env.WHATSAPP_PROVIDER ?? 'ycloud';
 
   if (provider === 'baileys') {
-    const workerUrl = process.env.WORKER_INTERNAL_URL ?? 'http://localhost:3001';
+    const workerUrl = (
+      process.env.WORKER_INTERNAL_URL ?? 'http://localhost:3001'
+    ).replace(/\/+$/, '');
     const res = await fetch(`${workerUrl}/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

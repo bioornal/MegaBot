@@ -1,0 +1,52 @@
+services:
+  - type: web
+    name: megabot
+    env: node
+    rootDir: agente-delivery
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    # Render Starter plan requerido para disco persistente
+    disk:
+      name: megabot-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WHATSAPP_PROVIDER
+        value: baileys
+      - key: WORKER_PORT
+        value: 3001
+      - key: WORKER_INTERNAL_URL
+        value: http://127.0.0.1:3001
+      - key: DATA_DIR
+        value: /data
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      # Supabase — mismo valor para Next.js (NEXT_PUBLIC_) y el worker
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_PRODUCTS_TABLE
+        value: products
+      - key: SUPABASE_PRODUCT_ID_COLUMN
+        value: id
+      - key: SUPABASE_PRODUCT_NAME_COLUMN
+        value: name
+      - key: SUPABASE_PRODUCT_DESCRIPTION_COLUMN
+        value: description
+      - key: SUPABASE_PRODUCT_CATEGORY_COLUMN
+        value: category_id
+      - key: SUPABASE_PRODUCT_PRICE_COLUMN
+        value: price
+      - key: SUPABASE_PRODUCT_STOCK_COLUMN
+        value: stock
+      - key: SUPABASE_COMPANY_INFO_TABLE
+        value: info_empresa

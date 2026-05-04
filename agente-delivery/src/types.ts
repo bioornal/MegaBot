@@ -9,6 +9,7 @@ export interface Conversation {
 
 export interface ConversationWithPreview extends Conversation {
   last_message_preview: string | null;
+  last_message_role: "user" | "assistant" | "human" | null;
 }
 
 export interface Message {
@@ -16,5 +17,6 @@ export interface Message {
   conversation_id: number;
   role: "user" | "assistant" | "human";
   content: string;
+  media_url?: string | null;
   created_at: number;
 }
