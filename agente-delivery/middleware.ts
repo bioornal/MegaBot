@@ -25,7 +25,13 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch {
+    // Si Supabase no responde, tratamos como sin sesión → redirigir a login
+  }
 
   const { pathname } = request.nextUrl
   const isPublic =
