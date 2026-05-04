@@ -40,3 +40,9 @@ body {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.5; transform: scale(0.75); }
 }
+
+input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(34, 217, 134, 0.35);
+  border-color: #22d986 !important;
+}
