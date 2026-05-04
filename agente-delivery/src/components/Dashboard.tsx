@@ -4,6 +4,7 @@ import type { ConversationWithPreview, Message } from "@/types";
 import ConversationList from "./ConversationList";
 import ConversationPanel from "./ConversationPanel";
 import StatusWidget from "./StatusWidget";
+import { logout } from '@/app/login/actions'
 
 const POLL_INTERVAL_MS = 10_000;
 
@@ -210,6 +211,50 @@ export default function Dashboard() {
               activeId={activeId}
               onSelect={handleSelectConversation}
             />
+          </div>
+
+          {/* Logout */}
+          <div
+            style={{
+              padding: '12px 12px',
+              borderTop: '1px solid #1c2836',
+              flexShrink: 0,
+            }}
+          >
+            <form action={logout}>
+              <button
+                type="submit"
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  background: 'transparent',
+                  border: '1px solid #1c2836',
+                  borderRadius: 8,
+                  color: '#3d5268',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  transition: 'color 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.color = '#7a9bb5'
+                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = '#263648'
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.color = '#3d5268'
+                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = '#1c2836'
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                Cerrar sesión
+              </button>
+            </form>
           </div>
         </div>
 
