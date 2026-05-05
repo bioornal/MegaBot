@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
+const KNOWN_TENANT_IDS = ['megamuebles', 'iguazufalls', 'impasto']
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -18,6 +20,15 @@ export function middleware(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
+  }
+
+  const tenantId = request.cookies.get('tenant-id')?.value
+  if (!tenantId || !KNOWN_TENANT_IDS.includes(tenantId)) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    const res = NextResponse.redirect(url)
+    res.cookies.delete('tenant-id')
+    return res
   }
 
   return NextResponse.next()
