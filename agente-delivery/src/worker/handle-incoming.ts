@@ -8,15 +8,19 @@ import {
   clearMessages,
 } from '../lib/db';
 import { getAIReply } from '../lib/openai';
-import { SYSTEM_PROMPT } from '../lib/system-prompt';
+import { buildSystemPrompt } from '../lib/system-prompt';
 import { getCatalogContext } from '../lib/catalog';
 import { getCompanyInfoContext } from '../lib/company-info';
 import { randomDelayMs, sleep } from '../lib/delay';
 import type { WhatsAppProvider, IncomingMessage } from '../providers/types';
+import { getTenantById, TENANTS } from '../tenants.config';
 
 const AI_REPLY_DELAY_MIN_MS = 3_000;
 const AI_REPLY_DELAY_MAX_MS = 20_000;
 const AI_REPLY_DELAY_ENABLED = process.env.AI_REPLY_DELAY !== 'false';
+
+const _tenant = getTenantById(process.env.TENANT_ID ?? '') ?? TENANTS[0];
+const SYSTEM_PROMPT = buildSystemPrompt(_tenant.botName, _tenant.name);
 
 const ADMIN_HELP =
   'Comandos disponibles:\n' +
