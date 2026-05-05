@@ -1,13 +1,13 @@
 import { sendWhatsAppMessage } from './ycloud';
 
-export async function sendMessage(to: string, text: string): Promise<void> {
+export async function sendMessage(to: string, text: string, workerUrl?: string): Promise<void> {
   const provider = process.env.WHATSAPP_PROVIDER ?? 'ycloud';
 
   if (provider === 'baileys') {
-    const workerUrl = (
-      process.env.WORKER_INTERNAL_URL ?? 'http://localhost:3001'
+    const resolvedWorkerUrl = (
+      workerUrl ?? process.env.WORKER_INTERNAL_URL ?? 'http://localhost:3001'
     ).replace(/\/+$/, '');
-    const res = await fetch(`${workerUrl}/send`, {
+    const res = await fetch(`${resolvedWorkerUrl}/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to, text }),
