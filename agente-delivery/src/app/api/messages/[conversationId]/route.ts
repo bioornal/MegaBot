@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConversationById, getMessages, insertMessage, clearMessages } from "@/lib/db";
+import { getSessionTenant } from "@/lib/tenant";
+import { getDb } from "@/lib/db";
 import { sendMessage } from "@/lib/send-message";
 
 export const dynamic = 'force-dynamic';
@@ -9,23 +10,30 @@ interface Ctx {
 }
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
+  const tenant = await getSessionTenant();
+  if (!tenant) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const db = getDb(tenant.dataDir);
+
   const { conversationId } = await params;
   const id = parseInt(conversationId, 10);
 
-  const convo = getConversationById(id);
+  const convo = db.getConversationById(id);
   if (!convo) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const messages = getMessages(id, 50);
-  return NextResponse.json(messages);
+  return NextResponse.json(db.getMessages(id, 50));
 }
 
 export async function POST(req: NextRequest, { params }: Ctx) {
+  const tenant = await getSessionTenant();
+  if (!tenant) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const db = getDb(tenant.dataDir);
+
   const { conversationId } = await params;
   const id = parseInt(conversationId, 10);
 
-  const convo = getConversationById(id);
+  const convo = db.getConversationById(id);
   if (!convo) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -45,7 +53,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const trimmed = content.trim();
 
   try {
-    await sendMessage(convo.phone, trimmed);
+    await sendMessage(convo.phone, trimmed, tenant.workerUrl);
   } catch (err) {
     console.error("[messages] Error enviando mensaje:", err);
     return NextResponse.json(
@@ -54,19 +62,23 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     );
   }
 
-  const message = insertMessage(id, "human", trimmed);
+  const message = db.insertMessage(id, "human", trimmed);
   return NextResponse.json({ ok: true, messageId: message.id });
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
+  const tenant = await getSessionTenant();
+  if (!tenant) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const db = getDb(tenant.dataDir);
+
   const { conversationId } = await params;
   const id = parseInt(conversationId, 10);
 
-  const convo = getConversationById(id);
+  const convo = db.getConversationById(id);
   if (!convo) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  clearMessages(id);
+  db.clearMessages(id);
   return NextResponse.json({ ok: true });
 }

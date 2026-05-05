@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getSessionTenant } from '@/lib/tenant';
 
 export const dynamic = 'force-dynamic';
 
@@ -6,11 +7,11 @@ export async function GET() {
   const provider = process.env.WHATSAPP_PROVIDER ?? 'ycloud';
 
   if (provider !== 'baileys') {
-    // YCloud y Meta son webhook-based: si están configurados, están "conectados"
     return NextResponse.json({ status: 'connected', provider });
   }
 
-  const workerUrl = process.env.WORKER_INTERNAL_URL ?? 'http://localhost:3001';
+  const tenant = await getSessionTenant();
+  const workerUrl = tenant?.workerUrl ?? process.env.WORKER_INTERNAL_URL ?? 'http://localhost:3001';
 
   try {
     const res = await fetch(`${workerUrl}/status`, {
