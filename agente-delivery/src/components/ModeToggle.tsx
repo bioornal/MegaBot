@@ -34,9 +34,9 @@ export default function ModeToggle({ mode, conversationId, onToggle }: Props) {
         borderRadius: 7,
         fontSize: 11.5,
         fontWeight: 600,
-        background: isAI ? "#0a2218" : "#1e1200",
-        color: isAI ? "#22d986" : "#f59e0b",
-        border: `1px solid ${isAI ? "#153a26" : "#4a2e05"}`,
+        background: isAI ? "color-mix(in srgb, var(--color-primary) 8%, #060a0f)" : "#1e1200",
+        color: isAI ? "var(--color-primary)" : "#f59e0b",
+        border: `1px solid ${isAI ? "color-mix(in srgb, var(--color-primary) 15%, #060a0f)" : "#4a2e05"}`,
         cursor: pending ? "not-allowed" : "pointer",
         opacity: pending ? 0.5 : 1,
         letterSpacing: "0.02em",
@@ -47,9 +47,9 @@ export default function ModeToggle({ mode, conversationId, onToggle }: Props) {
         width: 6,
         height: 6,
         borderRadius: "50%",
-        background: isAI ? "#22d986" : "#f59e0b",
+        background: isAI ? "var(--color-primary)" : "#f59e0b",
         flexShrink: 0,
-        boxShadow: `0 0 5px ${isAI ? "rgba(34,217,134,0.6)" : "rgba(245,158,11,0.6)"}`,
+        boxShadow: `0 0 5px ${isAI ? "var(--color-glow)" : "rgba(245,158,11,0.6)"}`,
       }} />
       {/* Full label on desktop, short label on mobile via CSS */}
       <span className="mode-label-full">{isAI ? "IA automático" : "Humano manual"}</span>

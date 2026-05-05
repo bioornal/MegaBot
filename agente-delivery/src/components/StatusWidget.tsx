@@ -12,7 +12,7 @@ interface StatusData {
 const STATUS_POLL_INTERVAL_MS = 10_000;
 
 const STATUS_CONFIG = {
-  connected: { color: "#22d986", label: "Conectado" },
+  connected: { color: "var(--color-primary)", label: "Conectado" },
   connecting: { color: "#f59e0b", label: "Conectando..." },
   waiting_qr: { color: "#3b82f6", label: "Esperando QR" },
   disconnected: { color: "#ef4444", label: "Desconectado" },

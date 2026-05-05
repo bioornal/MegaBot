@@ -115,7 +115,7 @@ export default function ConversationList({ conversations, activeId, onSelect }: 
                 bottom: "20%",
                 width: 2,
                 borderRadius: 999,
-                background: "#22d986",
+                background: "var(--color-primary)",
               }} />
             )}
 
@@ -198,9 +198,9 @@ export default function ConversationList({ conversations, activeId, onSelect }: 
                   padding: "1px 5px",
                   borderRadius: 999,
                   flexShrink: 0,
-                  background: isAI ? "#0a2218" : "#1e1200",
-                  color: isAI ? "#22d986" : "#f59e0b",
-                  border: `1px solid ${isAI ? "#143320" : "#4a2e05"}`,
+                  background: isAI ? "color-mix(in srgb, var(--color-primary) 8%, #060a0f)" : "#1e1200",
+                  color: isAI ? "var(--color-primary)" : "#f59e0b",
+                  border: `1px solid ${isAI ? "color-mix(in srgb, var(--color-primary) 12%, #060a0f)" : "#4a2e05"}`,
                   fontWeight: 600,
                   letterSpacing: "0.05em",
                 }}>

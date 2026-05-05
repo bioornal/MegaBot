@@ -26,8 +26,8 @@ export default function MessageBubble({ message }: Props) {
         maxWidth: "72%",
         padding: "3px 7px 2px",
         borderRadius: isUser ? "3px 10px 10px 10px" : "10px 3px 10px 10px",
-        background: isUser ? "#101e2d" : isAssistant ? "#0b2a1e" : "#231400",
-        border: `1px solid ${isUser ? "#1a2e44" : isAssistant ? "#183f2c" : "#523508"}`,
+        background: isUser ? "#101e2d" : isAssistant ? "color-mix(in srgb, var(--color-primary) 10%, #060a0f)" : "#231400",
+        border: `1px solid ${isUser ? "#1a2e44" : isAssistant ? "color-mix(in srgb, var(--color-primary) 18%, #060a0f)" : "#523508"}`,
         color: "#e8f0f8",
       }}>
         {isHuman && (
@@ -46,7 +46,7 @@ export default function MessageBubble({ message }: Props) {
             fontSize: 9,
             fontWeight: 700,
             marginBottom: 2,
-            color: "#22d986",
+            color: "var(--color-primary)",
             letterSpacing: "0.07em",
           }}>
             SOFÍA

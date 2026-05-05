@@ -260,9 +260,9 @@ export default function ConversationPanel({
             marginBottom: 14,
             padding: "5px 12px",
             borderRadius: 8,
-            background: "#0a2218",
-            border: "1px solid #153a26",
-            color: "#22d986",
+            background: "color-mix(in srgb, var(--color-primary) 8%, #060a0f)",
+            border: "1px solid color-mix(in srgb, var(--color-primary) 15%, #060a0f)",
+            color: "var(--color-primary)",
             letterSpacing: "0.02em",
           }}>
             Bot respondiendo automáticamente · modo IA activo
@@ -322,14 +322,14 @@ export default function ConversationPanel({
                 fontWeight: 600,
                 background: sending || !input.trim()
                   ? "#111a25"
-                  : "linear-gradient(140deg, #22d986 0%, #10b060 100%)",
+                  : "linear-gradient(140deg, var(--color-primary) 0%, var(--color-accent) 100%)",
                 color: sending || !input.trim() ? "#3d5268" : "#04130a",
                 border: "none",
                 cursor: sending || !input.trim() ? "not-allowed" : "pointer",
                 flexShrink: 0,
                 boxShadow: sending || !input.trim()
                   ? "none"
-                  : "0 3px 12px rgba(34,217,134,0.25)",
+                  : "0 3px 12px var(--color-glow)",
                 transition: "opacity 0.15s",
               }}
             >
