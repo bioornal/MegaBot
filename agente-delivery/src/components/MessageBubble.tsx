@@ -17,76 +17,56 @@ export default function MessageBubble({ message }: Props) {
   const isHuman = message.role === "human";
 
   return (
-    <div
-      style={{
-        display: "flex",
-        marginBottom: 10,
-        justifyContent: isUser ? "flex-start" : "flex-end",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "72%",
-          padding: "10px 14px 8px",
-          borderRadius: isUser
-            ? "4px 14px 14px 14px"
-            : "14px 4px 14px 14px",
-          background: isUser
-            ? "#111e2c"
-            : isAssistant
-            ? "#0c2a1e"
-            : "#251600",
-          border: `1px solid ${
-            isUser ? "#1e3045" : isAssistant ? "#1a4530" : "#5a3a0a"
-          }`,
-          color: "#e8f0f8",
-        }}
-      >
+    <div style={{
+      display: "flex",
+      marginBottom: 4,
+      justifyContent: isUser ? "flex-start" : "flex-end",
+    }}>
+      <div style={{
+        maxWidth: "72%",
+        padding: "3px 7px 2px",
+        borderRadius: isUser ? "3px 10px 10px 10px" : "10px 3px 10px 10px",
+        background: isUser ? "#101e2d" : isAssistant ? "#0b2a1e" : "#231400",
+        border: `1px solid ${isUser ? "#1a2e44" : isAssistant ? "#183f2c" : "#523508"}`,
+        color: "#e8f0f8",
+      }}>
         {isHuman && (
-          <div
-            style={{
-              fontSize: 10.5,
-              fontWeight: 600,
-              marginBottom: 5,
-              color: "#f59e0b",
-              letterSpacing: "0.06em",
-            }}
-          >
+          <div style={{
+            fontSize: 9,
+            fontWeight: 700,
+            marginBottom: 2,
+            color: "#f59e0b",
+            letterSpacing: "0.07em",
+          }}>
             OPERADOR
           </div>
         )}
         {isAssistant && (
-          <div
-            style={{
-              fontSize: 10.5,
-              fontWeight: 600,
-              marginBottom: 5,
-              color: "#22d986",
-              letterSpacing: "0.06em",
-            }}
-          >
-            MEGABOT
+          <div style={{
+            fontSize: 9,
+            fontWeight: 700,
+            marginBottom: 2,
+            color: "#22d986",
+            letterSpacing: "0.07em",
+          }}>
+            SOFÍA
           </div>
         )}
-        <p
-          style={{
-            fontSize: 13,
-            lineHeight: 1.55,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
+        <p style={{
+          fontSize: 12.5,
+          lineHeight: 1.45,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+        }}>
           {message.content}
         </p>
-        <div
-          style={{
-            fontSize: 10.5,
-            marginTop: 5,
-            textAlign: "right",
-            color: "#2e4258",
-            fontFamily: "var(--font-mono, monospace)",
-          }}
-        >
+        <div style={{
+          fontSize: 9.5,
+          marginTop: 2,
+          textAlign: "right",
+          color: "#4a6a80",
+          fontFamily: "var(--font-mono, monospace)",
+        }}>
           {formatTime(message.created_at)}
         </div>
       </div>

@@ -43,32 +43,26 @@ interface Props {
   onSelect: (id: number) => void;
 }
 
-export default function ConversationList({
-  conversations,
-  activeId,
-  onSelect,
-}: Props) {
+export default function ConversationList({ conversations, activeId, onSelect }: Props) {
   if (conversations.length === 0) {
     return (
-      <div style={{ padding: "28px 12px", textAlign: "center" }}>
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            background: "#111a25",
-            border: "1px solid #1c2836",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            margin: "0 auto 10px",
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="#2a3e52">
+      <div style={{ padding: "24px 10px", textAlign: "center" }}>
+        <div style={{
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          background: "#111a25",
+          border: "1px solid #1c2836",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          margin: "0 auto 10px",
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#2a3e52">
             <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
           </svg>
         </div>
-        <div style={{ fontSize: 12, color: "#3d5268", lineHeight: 1.6 }}>
+        <div style={{ fontSize: 11.5, color: "#3d5268", lineHeight: 1.6 }}>
           Sin conversaciones aún.
           <br />
           Esperando mensajes.
@@ -78,14 +72,13 @@ export default function ConversationList({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
       {conversations.map((c) => {
         const isActive = activeId === c.id;
         const palette = avatarPalette(c.phone);
         const initials = getInitials(c.name, c.phone);
         const isAI = c.mode === "AI";
-        const needsAttention =
-          c.mode === "HUMAN" && c.last_message_role === "user";
+        const needsAttention = c.mode === "HUMAN" && c.last_message_role === "user";
 
         return (
           <button
@@ -94,121 +87,123 @@ export default function ConversationList({
             style={{
               width: "100%",
               textAlign: "left",
-              padding: "10px 11px",
-              border: `1px solid ${isActive ? "#253a50" : "transparent"}`,
-              borderRadius: 10,
-              background: isActive ? "#111e2c" : "transparent",
+              padding: "7px 9px",
+              border: `1px solid ${isActive ? "#1f3347" : "transparent"}`,
+              borderRadius: 8,
+              background: isActive ? "#0f1b28" : "transparent",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
-              gap: 10,
+              gap: 9,
+              position: "relative",
             }}
             onMouseEnter={(e) => {
               if (!isActive)
-                (e.currentTarget as HTMLElement).style.background = "#0f1820";
+                (e.currentTarget as HTMLElement).style.background = "#0c1620";
             }}
             onMouseLeave={(e) => {
               if (!isActive)
-                (e.currentTarget as HTMLElement).style.background =
-                  "transparent";
+                (e.currentTarget as HTMLElement).style.background = "transparent";
             }}
           >
+            {/* Active indicator stripe */}
+            {isActive && (
+              <span style={{
+                position: "absolute",
+                left: 0,
+                top: "20%",
+                bottom: "20%",
+                width: 2,
+                borderRadius: 999,
+                background: "#22d986",
+              }} />
+            )}
+
+            {/* Avatar */}
             <div style={{ position: "relative", flexShrink: 0 }}>
-              <div
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 11,
-                  background: palette.bg,
-                  border: `1px solid ${isActive ? "#2a4060" : "#1a2838"}`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: palette.fg,
-                  letterSpacing: "0.03em",
-                }}
-              >
+              <div style={{
+                width: 32,
+                height: 32,
+                borderRadius: 9,
+                background: palette.bg,
+                border: `1px solid ${isActive ? "#253a50" : "#182230"}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 11.5,
+                fontWeight: 700,
+                color: palette.fg,
+                letterSpacing: "0.03em",
+              }}>
                 {initials}
               </div>
               {needsAttention && (
-                <span
-                  style={{
-                    position: "absolute",
-                    top: -3,
-                    right: -3,
-                    width: 11,
-                    height: 11,
-                    borderRadius: "50%",
-                    background: "#f59e0b",
-                    border: "2px solid #090e14",
-                    animation: "pulse-dot 1.4s ease-in-out infinite",
-                  }}
-                />
+                <span style={{
+                  position: "absolute",
+                  top: -2,
+                  right: -2,
+                  width: 9,
+                  height: 9,
+                  borderRadius: "50%",
+                  background: "#f59e0b",
+                  border: "2px solid #090e14",
+                  animation: "pulse-dot 1.4s ease-in-out infinite",
+                }} />
               )}
             </div>
 
+            {/* Text content */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 6,
-                  marginBottom: 3,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: isActive ? "#e8f0f8" : "#c0d0e0",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    lineHeight: 1.3,
-                  }}
-                >
+              <div style={{
+                display: "flex",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                gap: 4,
+                marginBottom: 2,
+              }}>
+                <span style={{
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: isActive ? "#e8f0f8" : "#b8cad8",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  lineHeight: 1.3,
+                }}>
                   {c.name ?? c.phone}
                 </span>
-                <span style={{ fontSize: 10.5, color: "#2e4258", flexShrink: 0 }}>
+                <span style={{ fontSize: 10, color: "#2a3e52", flexShrink: 0, lineHeight: 1.3 }}>
                   {relativeTime(c.last_message_at)}
                 </span>
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 6,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 11.5,
-                    color: "#3d5268",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    flex: 1,
-                  }}
-                >
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 4,
+              }}>
+                <span style={{
+                  fontSize: 11,
+                  color: "#324a60",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  flex: 1,
+                  lineHeight: 1.3,
+                }}>
                   {c.last_message_preview ?? "Sin mensajes"}
                 </span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    padding: "1px 6px",
-                    borderRadius: 999,
-                    flexShrink: 0,
-                    background: isAI ? "#0a2218" : "#201400",
-                    color: isAI ? "#22d986" : "#f59e0b",
-                    border: `1px solid ${isAI ? "#153a26" : "#503208"}`,
-                    fontWeight: 500,
-                    letterSpacing: "0.04em",
-                  }}
-                >
+                <span style={{
+                  fontSize: 9.5,
+                  padding: "1px 5px",
+                  borderRadius: 999,
+                  flexShrink: 0,
+                  background: isAI ? "#0a2218" : "#1e1200",
+                  color: isAI ? "#22d986" : "#f59e0b",
+                  border: `1px solid ${isAI ? "#143320" : "#4a2e05"}`,
+                  fontWeight: 600,
+                  letterSpacing: "0.05em",
+                }}>
                   {isAI ? "IA" : "OP"}
                 </span>
               </div>

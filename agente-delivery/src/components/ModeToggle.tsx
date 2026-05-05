@@ -25,35 +25,35 @@ export default function ModeToggle({ mode, conversationId, onToggle }: Props) {
     <button
       onClick={handleClick}
       disabled={pending}
+      title={isAI ? "Modo IA automático — click para cambiar a humano" : "Modo humano manual — click para cambiar a IA"}
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 7,
-        padding: "6px 12px",
-        borderRadius: 8,
-        fontSize: 12,
+        gap: 5,
+        padding: "5px 10px",
+        borderRadius: 7,
+        fontSize: 11.5,
         fontWeight: 600,
-        background: isAI ? "#0a2218" : "#201400",
+        background: isAI ? "#0a2218" : "#1e1200",
         color: isAI ? "#22d986" : "#f59e0b",
-        border: `1px solid ${isAI ? "#153a26" : "#503208"}`,
+        border: `1px solid ${isAI ? "#153a26" : "#4a2e05"}`,
         cursor: pending ? "not-allowed" : "pointer",
         opacity: pending ? 0.5 : 1,
         letterSpacing: "0.02em",
-        minWidth: 130,
-        justifyContent: "center",
+        whiteSpace: "nowrap",
       }}
     >
-      <span
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: "50%",
-          background: isAI ? "#22d986" : "#f59e0b",
-          flexShrink: 0,
-          boxShadow: `0 0 6px ${isAI ? "rgba(34,217,134,0.5)" : "rgba(245,158,11,0.5)"}`,
-        }}
-      />
-      {isAI ? "IA automático" : "Humano manual"}
+      <span style={{
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        background: isAI ? "#22d986" : "#f59e0b",
+        flexShrink: 0,
+        boxShadow: `0 0 5px ${isAI ? "rgba(34,217,134,0.6)" : "rgba(245,158,11,0.6)"}`,
+      }} />
+      {/* Full label on desktop, short label on mobile via CSS */}
+      <span className="mode-label-full">{isAI ? "IA automático" : "Humano manual"}</span>
+      <span className="mode-label-short">{isAI ? "IA" : "OP"}</span>
     </button>
   );
 }

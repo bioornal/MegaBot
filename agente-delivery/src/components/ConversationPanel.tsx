@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import type { Conversation, Message } from "@/types";
 import MessageBubble from "./MessageBubble";
 import ModeToggle from "./ModeToggle";
+import StatusWidget from "./StatusWidget";
 
 const AVATAR_PALETTES = [
   { bg: "#152040", fg: "#5090e0" },
@@ -38,6 +39,7 @@ interface Props {
   onSendMessage: (id: number, content: string) => Promise<boolean>;
   onDelete: (id: number) => Promise<void>;
   onResetMemory: (id: number) => Promise<void>;
+  onBack?: () => void;
 }
 
 export default function ConversationPanel({
@@ -47,6 +49,7 @@ export default function ConversationPanel({
   onSendMessage,
   onDelete,
   onResetMemory,
+  onBack,
 }: Props) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -80,110 +83,120 @@ export default function ConversationPanel({
   const initials = getInitials(conversation.name, conversation.phone);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        background: "#0d1219",
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#0d1219" }}>
+
       {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          padding: "14px 20px",
-          borderBottom: "1px solid #1c2836",
-          flexShrink: 0,
-          background: "#0d1219",
-        }}
-      >
-        <div
-          style={{
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+        padding: "11px 14px",
+        borderBottom: "1px solid #1c2836",
+        flexShrink: 0,
+        background: "#090e14",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+          {/* Back button (visible on mobile) */}
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="mobile-back-btn"
+              style={{
+                flexShrink: 0,
+                width: 30,
+                height: 30,
+                borderRadius: 8,
+                background: "transparent",
+                border: "1px solid #1c2836",
+                color: "#7a9bb5",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="Volver a conversaciones"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+          )}
+
+          <div style={{
+            width: 34,
+            height: 34,
+            borderRadius: 10,
+            background: palette.bg,
+            border: "1px solid #1a2838",
             display: "flex",
             alignItems: "center",
-            gap: 12,
-            minWidth: 0,
-          }}
-        >
-          <div
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 11,
-              background: palette.bg,
-              border: "1px solid #1a2838",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-              fontSize: 13,
-              fontWeight: 600,
-              color: palette.fg,
-              letterSpacing: "0.03em",
-            }}
-          >
+            justifyContent: "center",
+            flexShrink: 0,
+            fontSize: 12,
+            fontWeight: 700,
+            color: palette.fg,
+            letterSpacing: "0.03em",
+          }}>
             {initials}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: "#e8f0f8",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                lineHeight: 1.3,
-              }}
-            >
+            <div style={{
+              fontSize: 13.5,
+              fontWeight: 600,
+              color: "#e8f0f8",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              lineHeight: 1.3,
+              letterSpacing: "-0.01em",
+            }}>
               {conversation.name ?? conversation.phone}
             </div>
             {conversation.name && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#3d5268",
-                  fontFamily:
-                    "var(--font-mono, 'JetBrains Mono', monospace)",
-                  marginTop: 2,
-                  letterSpacing: "0.02em",
-                }}
-              >
+              <div style={{
+                fontSize: 10.5,
+                color: "#3d5268",
+                fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+                marginTop: 1,
+                letterSpacing: "0.02em",
+              }}>
                 {conversation.phone}
               </div>
             )}
           </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexShrink: 0,
-          }}
-        >
+        {/* Actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {/* Status widget — only visible on mobile (desktop has its own bar) */}
+          <span className="mobile-status-in-header">
+            <StatusWidget />
+          </span>
+
           <ModeToggle
             mode={conversation.mode}
             conversationId={conversation.id}
             onToggle={onToggleMode}
           />
+
+          {/* Reset memory — icon+label on desktop, icon-only on mobile */}
           <button
             onClick={() => setShowResetConfirm(true)}
             title="Borrar historial — la IA olvidará todo sobre este cliente"
             style={{
-              fontSize: 12,
-              padding: "6px 12px",
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: 11.5,
+              padding: "5px 10px",
               borderRadius: 7,
               color: "#f59e0b",
               border: "1px solid #3a2a00",
               background: "transparent",
               cursor: "pointer",
               fontWeight: 500,
+              whiteSpace: "nowrap",
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLElement).style.background = "#1a1200";
@@ -194,19 +207,29 @@ export default function ConversationPanel({
               (e.currentTarget as HTMLElement).style.borderColor = "#3a2a00";
             }}
           >
-            Resetear IA
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 1 0 .49-3.51" />
+            </svg>
+            <span className="btn-label-hide-mobile">Resetear IA</span>
           </button>
+
           <button
             onClick={() => setShowConfirm(true)}
+            title="Borrar conversación"
             style={{
-              fontSize: 12,
-              padding: "6px 12px",
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: 11.5,
+              padding: "5px 10px",
               borderRadius: 7,
               color: "#ef4444",
               border: "1px solid #3a1818",
               background: "transparent",
               cursor: "pointer",
               fontWeight: 500,
+              whiteSpace: "nowrap",
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLElement).style.background = "#1a0808";
@@ -217,34 +240,36 @@ export default function ConversationPanel({
               (e.currentTarget as HTMLElement).style.borderColor = "#3a1818";
             }}
           >
-            Borrar
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14H6L5 6" />
+              <path d="M10 11v6M14 11v6" />
+              <path d="M9 6V4h6v2" />
+            </svg>
+            <span className="btn-label-hide-mobile">Borrar</span>
           </button>
         </div>
       </div>
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
         {conversation.mode === "AI" && (
-          <div
-            style={{
-              textAlign: "center",
-              fontSize: 11.5,
-              marginBottom: 16,
-              padding: "6px 14px",
-              borderRadius: 8,
-              background: "#0a2218",
-              border: "1px solid #153a26",
-              color: "#22d986",
-              letterSpacing: "0.02em",
-            }}
-          >
+          <div style={{
+            textAlign: "center",
+            fontSize: 11,
+            marginBottom: 14,
+            padding: "5px 12px",
+            borderRadius: 8,
+            background: "#0a2218",
+            border: "1px solid #153a26",
+            color: "#22d986",
+            letterSpacing: "0.02em",
+          }}>
             Bot respondiendo automáticamente · modo IA activo
           </div>
         )}
         {messages.length === 0 && (
-          <div
-            style={{ textAlign: "center", fontSize: 13, marginTop: 40, color: "#3d5268" }}
-          >
+          <div style={{ textAlign: "center", fontSize: 12.5, marginTop: 40, color: "#3d5268" }}>
             Sin mensajes aún
           </div>
         )}
@@ -255,78 +280,69 @@ export default function ConversationPanel({
       </div>
 
       {/* Input */}
-      <div
-        style={{
-          flexShrink: 0,
-          padding: "14px 20px",
-          borderTop: "1px solid #1c2836",
-          background: "#090e14",
-        }}
-      >
+      <div style={{
+        flexShrink: 0,
+        padding: "12px 14px",
+        borderTop: "1px solid #1c2836",
+        background: "#090e14",
+      }}>
         {conversation.mode === "HUMAN" ? (
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Escribí tu respuesta... (Enter para enviar, Shift+Enter nueva línea)"
+              placeholder="Escribí tu respuesta... (Enter para enviar)"
               rows={2}
               style={{
                 flex: 1,
                 resize: "none",
-                borderRadius: 10,
-                padding: "10px 14px",
+                borderRadius: 9,
+                padding: "9px 12px",
                 fontSize: 13,
                 outline: "none",
                 background: "#0d1219",
                 color: "#e8f0f8",
                 border: "1px solid #1c2836",
-                minHeight: 46,
+                minHeight: 42,
                 maxHeight: 120,
-                lineHeight: 1.55,
+                lineHeight: 1.5,
                 fontFamily: "inherit",
               }}
-              onFocus={(e) => {
-                (e.target as HTMLElement).style.borderColor = "#253a50";
-              }}
-              onBlur={(e) => {
-                (e.target as HTMLElement).style.borderColor = "#1c2836";
-              }}
+              onFocus={(e) => { (e.target as HTMLElement).style.borderColor = "#253a50"; }}
+              onBlur={(e) => { (e.target as HTMLElement).style.borderColor = "#1c2836"; }}
             />
             <button
               onClick={handleSend}
               disabled={sending || !input.trim()}
               style={{
-                padding: "10px 18px",
-                borderRadius: 10,
-                fontSize: 13,
+                padding: "9px 16px",
+                borderRadius: 9,
+                fontSize: 12.5,
                 fontWeight: 600,
-                background:
-                  sending || !input.trim()
-                    ? "#111a25"
-                    : "linear-gradient(140deg, #22d986 0%, #10b060 100%)",
+                background: sending || !input.trim()
+                  ? "#111a25"
+                  : "linear-gradient(140deg, #22d986 0%, #10b060 100%)",
                 color: sending || !input.trim() ? "#3d5268" : "#04130a",
                 border: "none",
                 cursor: sending || !input.trim() ? "not-allowed" : "pointer",
                 flexShrink: 0,
-                boxShadow:
-                  sending || !input.trim()
-                    ? "none"
-                    : "0 4px 14px rgba(34,217,134,0.25)",
+                boxShadow: sending || !input.trim()
+                  ? "none"
+                  : "0 3px 12px rgba(34,217,134,0.25)",
+                transition: "opacity 0.15s",
               }}
             >
               {sending ? "···" : "Enviar"}
             </button>
           </div>
         ) : (
-          <div
-            style={{
-              textAlign: "center",
-              fontSize: 12,
-              padding: "8px 0",
-              color: "#3d5268",
-            }}
-          >
+          <div style={{
+            textAlign: "center",
+            fontSize: 11.5,
+            padding: "7px 0",
+            color: "#3d5268",
+          }}>
             Cambiá a modo HUMANO para responder manualmente
           </div>
         )}
@@ -334,57 +350,39 @@ export default function ConversationPanel({
 
       {/* Reset memory confirm modal */}
       {showResetConfirm && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 50,
-            background: "rgba(0,0,0,0.72)",
-            backdropFilter: "blur(4px)",
-          }}
-        >
-          <div
-            style={{
-              borderRadius: 14,
-              padding: "24px",
-              width: 320,
-              background: "#0d1219",
-              border: "1px solid #1c2836",
-              boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
-            }}
-          >
-            <h3
-              style={{
-                fontWeight: 600,
-                color: "#e8f0f8",
-                marginBottom: 8,
-                fontSize: 15,
-              }}
-            >
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 50,
+          background: "rgba(0,0,0,0.72)",
+          backdropFilter: "blur(4px)",
+          padding: "0 16px",
+        }}>
+          <div style={{
+            borderRadius: 14,
+            padding: "22px",
+            width: "100%",
+            maxWidth: 320,
+            background: "#0d1219",
+            border: "1px solid #1c2836",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
+          }}>
+            <h3 style={{ fontWeight: 600, color: "#e8f0f8", marginBottom: 8, fontSize: 14.5 }}>
               ¿Resetear memoria de la IA?
             </h3>
-            <p
-              style={{
-                fontSize: 13,
-                marginBottom: 20,
-                color: "#4a6278",
-                lineHeight: 1.55,
-              }}
-            >
-              Se borrará todo el historial de mensajes. Sofía olvidará la conversación y arrancará de cero con este cliente. La conversación seguirá apareciendo en la lista.
+            <p style={{ fontSize: 12.5, marginBottom: 18, color: "#4a6278", lineHeight: 1.55 }}>
+              Se borrará todo el historial de mensajes. Sofía olvidará la conversación y arrancará de cero con este cliente.
             </p>
-            <div
-              style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}
-            >
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button
                 onClick={() => setShowResetConfirm(false)}
                 style={{
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  fontSize: 13,
+                  padding: "7px 14px",
+                  borderRadius: 7,
+                  fontSize: 12.5,
                   background: "#111a25",
                   color: "#c0d0e0",
                   border: "1px solid #1c2836",
@@ -400,9 +398,9 @@ export default function ConversationPanel({
                   onResetMemory(conversation.id);
                 }}
                 style={{
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  fontSize: 13,
+                  padding: "7px 14px",
+                  borderRadius: 7,
+                  fontSize: 12.5,
                   fontWeight: 600,
                   background: "#f59e0b",
                   color: "#1a0e00",
@@ -419,57 +417,39 @@ export default function ConversationPanel({
 
       {/* Delete confirm modal */}
       {showConfirm && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 50,
-            background: "rgba(0,0,0,0.72)",
-            backdropFilter: "blur(4px)",
-          }}
-        >
-          <div
-            style={{
-              borderRadius: 14,
-              padding: "24px",
-              width: 320,
-              background: "#0d1219",
-              border: "1px solid #1c2836",
-              boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
-            }}
-          >
-            <h3
-              style={{
-                fontWeight: 600,
-                color: "#e8f0f8",
-                marginBottom: 8,
-                fontSize: 15,
-              }}
-            >
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 50,
+          background: "rgba(0,0,0,0.72)",
+          backdropFilter: "blur(4px)",
+          padding: "0 16px",
+        }}>
+          <div style={{
+            borderRadius: 14,
+            padding: "22px",
+            width: "100%",
+            maxWidth: 320,
+            background: "#0d1219",
+            border: "1px solid #1c2836",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
+          }}>
+            <h3 style={{ fontWeight: 600, color: "#e8f0f8", marginBottom: 8, fontSize: 14.5 }}>
               ¿Borrar conversación?
             </h3>
-            <p
-              style={{
-                fontSize: 13,
-                marginBottom: 20,
-                color: "#4a6278",
-                lineHeight: 1.55,
-              }}
-            >
+            <p style={{ fontSize: 12.5, marginBottom: 18, color: "#4a6278", lineHeight: 1.55 }}>
               Se eliminan todos los mensajes. Esta acción no se puede deshacer.
             </p>
-            <div
-              style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}
-            >
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button
                 onClick={() => setShowConfirm(false)}
                 style={{
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  fontSize: 13,
+                  padding: "7px 14px",
+                  borderRadius: 7,
+                  fontSize: 12.5,
                   background: "#111a25",
                   color: "#c0d0e0",
                   border: "1px solid #1c2836",
@@ -485,9 +465,9 @@ export default function ConversationPanel({
                   onDelete(conversation.id);
                 }}
                 style={{
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  fontSize: 13,
+                  padding: "7px 14px",
+                  borderRadius: 7,
+                  fontSize: 12.5,
                   fontWeight: 600,
                   background: "#ef4444",
                   color: "#fff",
