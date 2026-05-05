@@ -8,7 +8,13 @@ import { logout } from '@/app/login/actions'
 
 const POLL_INTERVAL_MS = 10_000;
 
-export default function Dashboard() {
+interface DashboardProps {
+  tenantName: string;
+  botName: string;
+  tenantId: string;
+}
+
+export default function Dashboard({ tenantName, botName, tenantId }: DashboardProps) {
   const [conversations, setConversations] = useState<ConversationWithPreview[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const activeIdRef = useRef<number | null>(null);
@@ -161,7 +167,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#e8f0f8", lineHeight: 1.25, letterSpacing: "-0.01em" }}>
-                  Mega Muebles
+                  {tenantName}
                 </div>
                 <div style={{ fontSize: 10.5, color: "#3d5268", lineHeight: 1.4, marginTop: 1 }}>
                   {conversations.length > 0

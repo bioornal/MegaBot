@@ -37,12 +37,12 @@ export default function LoginPage() {
               width: 38,
               height: 38,
               borderRadius: 11,
-              background: 'linear-gradient(140deg, #22d986 0%, #0fa860 100%)',
+              background: 'linear-gradient(140deg, #475569 0%, #334155 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              boxShadow: '0 4px 14px rgba(34,217,134,0.28)',
+              boxShadow: '0 4px 14px rgba(71,85,105,0.28)',
             }}
           >
             <svg width="19" height="19" viewBox="0 0 24 24" fill="white">
@@ -51,10 +51,10 @@ export default function LoginPage() {
           </div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 600, color: '#e8f0f8', lineHeight: 1.25 }}>
-              MegaBot
+              Bot Dashboard
             </div>
             <div style={{ fontSize: 11, color: '#3d5268', lineHeight: 1.4, marginTop: 1 }}>
-              Mega Muebles & Sommiers
+              Iniciá sesión para continuar
             </div>
           </div>
         </div>
@@ -137,12 +137,12 @@ export default function LoginPage() {
             style={{
               marginTop: 4,
               background: pending
-                ? '#0d3d26'
-                : 'linear-gradient(140deg, #22d986 0%, #0fa860 100%)',
+                ? '#1e293b'
+                : 'linear-gradient(140deg, var(--color-primary, #475569) 0%, var(--color-accent, #334155) 100%)',
               border: 'none',
               borderRadius: 8,
               padding: '11px 16px',
-              color: pending ? '#3d5268' : '#fff',
+              color: pending ? '#64748b' : '#fff',
               fontSize: 14,
               fontWeight: 600,
               cursor: pending ? 'not-allowed' : 'pointer',
