@@ -8,22 +8,17 @@ const MAX_CONTEXT_GROUPS = 12;
 const MAX_GROUPS_PER_REQUESTED_ITEM = 3;
 const MIN_VALID_OFFER_PRICE = 100;
 
-let cache:
-  | {
-    expiresAt: number;
-    rows: ProductRow[];
-  }
-  | null = null;
+const cache = new Map<string, { expiresAt: number; rows: ProductRow[] }>();
 
 function env(name: string, fallback = ""): string {
   return process.env[name] ?? fallback;
 }
 
-function getSupabaseConfig() {
+function getSupabaseConfig(table?: string) {
   return {
     url: env("SUPABASE_URL", env("NEXT_PUBLIC_SUPABASE_URL")).replace(/\/+$/, ""),
     anonKey: env("SUPABASE_ANON_KEY", env("NEXT_PUBLIC_SUPABASE_ANON_KEY")),
-    table: env("SUPABASE_PRODUCTS_TABLE", "products"),
+    table: table ?? env("SUPABASE_PRODUCTS_TABLE", "products"),
     columns: {
       id: env("SUPABASE_PRODUCT_ID_COLUMN", "id"),
       name: env("SUPABASE_PRODUCT_NAME_COLUMN", "name"),
@@ -159,11 +154,12 @@ function isOfferQuery(query: string): boolean {
   );
 }
 
-async function fetchProducts(): Promise<ProductRow[]> {
-  const config = getSupabaseConfig();
+async function fetchProducts(table?: string): Promise<ProductRow[]> {
+  const config = getSupabaseConfig(table);
   if (!config.url || !config.anonKey || !config.table) return [];
 
-  if (cache && cache.expiresAt > Date.now()) return cache.rows;
+  const cached = cache.get(config.table);
+  if (cached && cached.expiresAt > Date.now()) return cached.rows;
 
   const endpoint = new URL(`${config.url}/rest/v1/${config.table}`);
   endpoint.searchParams.set("select", "*,categories(name)");
@@ -182,11 +178,9 @@ async function fetchProducts(): Promise<ProductRow[]> {
   }
 
   const rows = (await res.json()) as ProductRow[];
-  cache = {
-    expiresAt: Date.now() + CACHE_TTL_MS,
-    rows: Array.isArray(rows) ? rows : [],
-  };
-  return cache.rows;
+  const entry = { expiresAt: Date.now() + CACHE_TTL_MS, rows: Array.isArray(rows) ? rows : [] };
+  cache.set(config.table, entry);
+  return entry.rows;
 }
 
 interface ProductGroup {
@@ -517,12 +511,12 @@ function formatGroup(group: ProductGroup): string {
   return `- ${group.name} | ${group.brand} | ${group.categoryName} | ${priceLine}`;
 }
 
-export async function getCatalogContext(query: string): Promise<string> {
+export async function getCatalogContext(query: string, table?: string): Promise<string> {
   const q = normalize(query);
-  const config = getSupabaseConfig();
+  const config = getSupabaseConfig(table);
 
   try {
-    const rows = await fetchProducts();
+    const rows = await fetchProducts(table);
     if (rows.length === 0) return "";
 
     const tokens = tokenize(query);

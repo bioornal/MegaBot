@@ -9,6 +9,7 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom';
 import { transcribeAudioBuffer } from '../lib/openai';
 import type { WhatsAppProvider, IncomingMessage, ProviderStatus } from './types';
+import { getTenantById, TENANTS } from '../tenants.config';
 
 const PROVIDER: 'baileys' = 'baileys';
 
@@ -55,10 +56,9 @@ export class BaileysProvider implements WhatsAppProvider {
   private readonly authDir: string;
 
   constructor() {
-    const dataDir = process.env.DATA_DIR
-      ? path.resolve(process.env.DATA_DIR)
-      : path.join(process.cwd(), 'data');
-    this.authDir = path.join(dataDir, 'baileys-auth');
+    const tenant = getTenantById(process.env.TENANT_ID ?? '') ?? TENANTS[0];
+    this.authDir = path.join(tenant.dataDir, 'baileys-auth');
+    console.log(`[baileys] Tenant: ${tenant.id} | authDir: ${this.authDir}`);
   }
 
   onMessage(handler: (msg: IncomingMessage) => Promise<void>): void {
@@ -181,6 +181,7 @@ export class BaileysProvider implements WhatsAppProvider {
       for (const msg of messages) {
         if (!msg.message) continue;
         if (msg.key.remoteJid?.endsWith('@g.us')) continue;
+        if (msg.key.remoteJid === 'status@broadcast') continue;
 
         let text =
           msg.message.conversation ||

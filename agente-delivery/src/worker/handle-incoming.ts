@@ -1,12 +1,4 @@
-import {
-  getOrCreateConversation,
-  getConversationById,
-  getConversationByPhone,
-  insertMessage,
-  getRecentHistory,
-  setMode,
-  clearMessages,
-} from '../lib/db';
+import { getDb } from '../lib/db';
 import { getAIReply } from '../lib/openai';
 import { buildSystemPrompt } from '../lib/system-prompt';
 import { getCatalogContext } from '../lib/catalog';
@@ -21,6 +13,17 @@ const AI_REPLY_DELAY_ENABLED = process.env.AI_REPLY_DELAY !== 'false';
 
 const _tenant = getTenantById(process.env.TENANT_ID ?? '') ?? TENANTS[0];
 const SYSTEM_PROMPT = buildSystemPrompt(_tenant.botName, _tenant.name);
+const db = getDb(_tenant.dataDir);
+const {
+  getOrCreateConversation,
+  getConversationById,
+  getConversationByPhone,
+  insertMessage,
+  getRecentHistory,
+  setMode,
+  clearMessages,
+} = db;
+console.log(`[handler] Tenant: ${_tenant.id} | DB: ${_tenant.dataDir}`);
 
 const ADMIN_HELP =
   'Comandos disponibles:\n' +
@@ -80,7 +83,7 @@ export async function handleIncoming(
   if (msg.fromMe) {
     const convo = getOrCreateConversation(msg.from);
     insertMessage(convo.id, 'human', msg.text);
-    setMode(convo.id, 'HUMAN');
+    // NO cambiar el modo - mantener el que ya tenía (AI o HUMAN)
     console.log(`[handler] <- Operador (dispositivo) → ${msg.from}: "${msg.text}"`);
     return;
   }
@@ -116,15 +119,25 @@ export async function handleIncoming(
 
   console.log(`[handler] Llamando LLM con ${llmMessages.length} mensajes...`);
   const start = Date.now();
-  const companyInfoContext = await getCompanyInfoContext();
-  const catalogContext = await getCatalogContext(msg.text);
-  const reply = await getAIReply(
-    llmMessages,
-    [SYSTEM_PROMPT, companyInfoContext, catalogContext]
-      .filter(Boolean)
-      .join('\n\n')
-  );
-  console.log(`[handler] LLM respondio en ${Date.now() - start}ms`);
+
+  console.log(`[handler] Obteniendo companyInfoContext (tabla: ${_tenant.companyInfoTable})...`);
+  const companyInfoContext = await getCompanyInfoContext(_tenant.companyInfoTable);
+  console.log(`[handler] companyInfoContext length: ${companyInfoContext.length}`);
+
+  console.log(`[handler] Obteniendo catalogContext (tabla: ${_tenant.productsTable}) para: "${msg.text}"`);
+  const catalogContext = await getCatalogContext(msg.text, _tenant.productsTable);
+  console.log(`[handler] catalogContext length: ${catalogContext.length}`);
+
+  const fullSystemPrompt = [SYSTEM_PROMPT, companyInfoContext, catalogContext]
+    .filter(Boolean)
+    .join('\n\n');
+
+  console.log(`[handler] fullSystemPrompt length: ${fullSystemPrompt.length}`);
+  console.log(`[handler] llmMessages:`, llmMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content.substring(0, 50) : '[multi]' })));
+
+  const reply = await getAIReply(llmMessages, fullSystemPrompt);
+  console.log(`[handler] LLM respondio en ${Date.now() - start}ms, reply length: ${reply.length}`);
+  console.log(`[handler] LLM reply: "${reply.substring(0, 200)}..."`);
 
   if (AI_REPLY_DELAY_ENABLED) {
     const delayMs = randomDelayMs(AI_REPLY_DELAY_MIN_MS, AI_REPLY_DELAY_MAX_MS);

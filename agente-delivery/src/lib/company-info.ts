@@ -8,29 +8,26 @@ type CompanyInfoRow = {
 const CACHE_TTL_MS = 5 * 60_000;
 const DEFAULT_TABLE = "info_empresa";
 
-let cache:
-  | {
-      expiresAt: number;
-      context: string;
-    }
-  | null = null;
+const cache = new Map<string, { expiresAt: number; context: string }>();
 
 function env(name: string, fallback = ""): string {
   return process.env[name] ?? fallback;
 }
 
-function getConfig() {
+function getConfig(table?: string) {
   return {
     url: env("SUPABASE_URL", env("NEXT_PUBLIC_SUPABASE_URL")).replace(/\/+$/, ""),
     anonKey: env("SUPABASE_ANON_KEY", env("NEXT_PUBLIC_SUPABASE_ANON_KEY")),
-    table: env("SUPABASE_COMPANY_INFO_TABLE", DEFAULT_TABLE),
+    table: table ?? env("SUPABASE_COMPANY_INFO_TABLE", DEFAULT_TABLE),
   };
 }
 
-export async function getCompanyInfoContext(): Promise<string> {
-  if (cache && cache.expiresAt > Date.now()) return cache.context;
+export async function getCompanyInfoContext(table?: string): Promise<string> {
+  const config = getConfig(table);
 
-  const config = getConfig();
+  const cached = cache.get(config.table);
+  if (cached && cached.expiresAt > Date.now()) return cached.context;
+
   if (!config.url || !config.anonKey || !config.table) return "";
 
   try {
@@ -64,10 +61,7 @@ export async function getCompanyInfoContext(): Promise<string> {
           ].join("\n")
         : "";
 
-    cache = {
-      expiresAt: Date.now() + CACHE_TTL_MS,
-      context,
-    };
+    cache.set(config.table, { expiresAt: Date.now() + CACHE_TTL_MS, context });
     return context;
   } catch (err) {
     console.error("[company-info] Error consultando Supabase:", err);

@@ -1,11 +1,22 @@
 'use client'
-import { useActionState } from 'react'
+import { useActionState, useState, useEffect } from 'react'
 import { login, type LoginState } from './actions'
 
 const initialState: LoginState = { error: null }
 
 export default function LoginPage() {
   const [state, action, pending] = useActionState(login, initialState)
+  const [email, setEmail] = useState('')
+
+  useEffect(() => {
+    if (state.error) {
+      const form = document.querySelector('form')
+      const emailInput = form?.querySelector('input[name="email"]') as HTMLInputElement
+      if (emailInput?.value) {
+        setEmail(emailInput.value)
+      }
+    }
+  }, [state.error])
 
   return (
     <div
@@ -74,6 +85,8 @@ export default function LoginPage() {
               type="email"
               autoComplete="email"
               required
+              defaultValue={email}
+              onChange={(e) => setEmail(e.target.value)}
               style={{
                 background: '#111a25',
                 border: '1px solid #1c2836',

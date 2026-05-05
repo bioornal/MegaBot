@@ -11,7 +11,9 @@ export async function GET() {
   }
 
   const tenant = await getSessionTenant();
-  const workerUrl = tenant?.workerUrl ?? process.env.WORKER_INTERNAL_URL ?? 'http://localhost:3001';
+  // En dev, WORKER_INTERNAL_URL apunta al único worker corriendo (puerto real).
+  // En producción no está seteado → usa el workerUrl del tenant (3001/3002/3003).
+  const workerUrl = process.env.WORKER_INTERNAL_URL ?? tenant?.workerUrl ?? 'http://localhost:3001';
 
   try {
     const res = await fetch(`${workerUrl}/status`, {

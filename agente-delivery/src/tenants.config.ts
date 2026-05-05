@@ -18,6 +18,8 @@ export interface Tenant {
   botName: string
   workerUrl: string
   dataDir: string
+  productsTable: string
+  companyInfoTable: string
   theme: TenantTheme
 }
 
@@ -29,6 +31,8 @@ export const TENANTS: Tenant[] = [
     botName: 'Sofía',
     workerUrl: 'http://localhost:3001',
     dataDir: path.resolve('./data/megamuebles'),
+    productsTable: 'products',
+    companyInfoTable: 'info_empresa',
     theme: {
       primary:   '#22d986',
       accent:    '#0fa860',
@@ -46,6 +50,8 @@ export const TENANTS: Tenant[] = [
     botName: 'Paula',
     workerUrl: 'http://localhost:3002',
     dataDir: path.resolve('./data/iguazufalls'),
+    productsTable: 'products_iguazufalls',
+    companyInfoTable: 'info_empresa_iguazufalls',
     theme: {
       primary:   '#c084fc',
       accent:    '#ec4899',
@@ -63,6 +69,8 @@ export const TENANTS: Tenant[] = [
     botName: 'Chris',
     workerUrl: 'http://localhost:3003',
     dataDir: path.resolve('./data/impasto'),
+    productsTable: 'products_impasto',
+    companyInfoTable: 'info_empresa_impasto',
     theme: {
       primary:   '#60a5fa',
       accent:    '#2563eb',
