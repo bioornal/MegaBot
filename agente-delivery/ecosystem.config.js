@@ -13,7 +13,7 @@ module.exports = {
     {
       name: 'worker-megamuebles',
       script: './node_modules/.bin/tsx',
-      args: '--env-file=.env src/worker/index.ts',
+      args: '--env-file=.env.local src/worker/index.ts',
       cwd: './',
       env: {
         NODE_ENV: 'production',
@@ -27,7 +27,7 @@ module.exports = {
     {
       name: 'worker-iguazufalls',
       script: './node_modules/.bin/tsx',
-      args: '--env-file=.env src/worker/index.ts',
+      args: '--env-file=.env.local src/worker/index.ts',
       cwd: './',
       env: {
         NODE_ENV: 'production',
@@ -41,7 +41,7 @@ module.exports = {
     {
       name: 'worker-impasto',
       script: './node_modules/.bin/tsx',
-      args: '--env-file=.env src/worker/index.ts',
+      args: '--env-file=.env.local src/worker/index.ts',
       cwd: './',
       env: {
         NODE_ENV: 'production',

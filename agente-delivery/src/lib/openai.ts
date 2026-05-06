@@ -1,15 +1,17 @@
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let _client: OpenAI | null = null;
+function getClient(): OpenAI {
+  if (!_client) _client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return _client;
+}
 
 export async function getAIReply(
   messages: Array<{ role: "user" | "assistant"; content: any }>,
   systemPrompt: string
 ): Promise<string> {
-  const response = await client.chat.completions.create({
+  const response = await getClient().chat.completions.create({
     model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
     messages: [
       { role: "system", content: systemPrompt },
@@ -24,7 +26,7 @@ export async function transcribeAudioBuffer(
   audio: Buffer,
   fileName = "audio.ogg"
 ): Promise<string> {
-  const response = await client.audio.transcriptions.create({
+  const response = await getClient().audio.transcriptions.create({
     file: await toFile(audio, fileName),
     model: process.env.OPENAI_TRANSCRIPTION_MODEL ?? "whisper-1",
   });
