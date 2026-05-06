@@ -5,6 +5,10 @@
 .env
 .env.local
 .env.*.local
+# Per-tenant env files (contienen claves OpenAI / Supabase) — no commitear
+.env.megamuebles
+.env.iguazufalls
+.env.impasto
 /data/
 .DS_Store
 *.pem

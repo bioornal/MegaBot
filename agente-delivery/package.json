@@ -12,9 +12,11 @@
     "start": "next start",
     "lint": "next lint",
     "dev:all": "npm run dev",
-    "worker:dev": "tsx watch --env-file=.env.local src/worker/index.ts",
-    "worker:start": "tsx src/worker/index.ts",
-    "start:prod": "concurrently -n next,worker -c cyan,green \"next start\" \"tsx src/worker/index.ts\""
+    "worker:dev": "tsx watch --env-file=.env.megamuebles src/worker/index.ts",
+    "worker:dev:iguazufalls": "tsx watch --env-file=.env.iguazufalls src/worker/index.ts",
+    "worker:dev:impasto": "tsx watch --env-file=.env.impasto src/worker/index.ts",
+    "worker:start": "tsx --env-file=.env.megamuebles src/worker/index.ts",
+    "start:prod": "concurrently -n next,worker -c cyan,green \"next start\" \"tsx --env-file=.env.megamuebles src/worker/index.ts\""
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",

@@ -1,12 +1,34 @@
 import http from 'node:http';
 import { createProvider, getProviderName } from '../providers/factory';
 import { handleIncoming } from './handle-incoming';
+import { getTenantById } from '../tenants.config';
 
-const PORT = parseInt(process.env.WORKER_PORT ?? '3001', 10);
+function loadTenantOrExit() {
+  const id = process.env.TENANT_ID;
+  if (!id) {
+    console.error('[worker] FATAL: TENANT_ID env var es obligatorio.');
+    process.exit(1);
+  }
+  const t = getTenantById(id);
+  if (!t) {
+    console.error(`[worker] FATAL: TENANT_ID="${id}" no existe en tenants.config.ts`);
+    process.exit(1);
+  }
+  return t;
+}
+const TENANT = loadTenantOrExit();
+
+const PORT = parseInt(process.env.WORKER_PORT ?? '', 10);
+if (!Number.isFinite(PORT)) {
+  console.error('[worker] FATAL: WORKER_PORT env var es obligatorio.');
+  process.exit(1);
+}
 
 async function main() {
   const providerName = getProviderName();
-  console.log(`[worker] Iniciando con proveedor: ${providerName}`);
+  console.log(
+    `[worker] boot | tenant=${TENANT.id} | port=${PORT} | dataDir=${TENANT.dataDir} | provider=${providerName}`
+  );
 
   const provider = await createProvider(providerName);
   provider.onMessage((msg) => handleIncoming(msg, provider));

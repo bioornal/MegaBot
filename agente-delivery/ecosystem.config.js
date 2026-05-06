@@ -1,3 +1,20 @@
+// PM2 multi-tenant.
+//
+// Cada worker carga su .env.{tenant} via tsx --env-file. Ese archivo
+// trae: TENANT_ID, WORKER_PORT, DATA_DIR, SUPABASE_PRODUCTS_TABLE,
+// SUPABASE_COMPANY_INFO_TABLE + las claves compartidas.
+//
+// Next.js (proceso "next") carga solo .env.local — NUNCA debe ver
+// TENANT_ID/WORKER_PORT/DATA_DIR de un tenant en particular: el routing
+// es por sesion via tenant.workerUrl en tenants.config.ts.
+//
+// Deploy:
+//   pm2 delete all
+//   pm2 start ecosystem.config.js
+//   pm2 save
+//
+// (delete + start, NO restart: PM2 cachea env del primer spawn).
+
 module.exports = {
   apps: [
     {
@@ -13,44 +30,23 @@ module.exports = {
     {
       name: 'worker-megamuebles',
       script: './node_modules/.bin/tsx',
-      args: '--env-file=.env.local src/worker/index.ts',
+      args: '--env-file=.env.megamuebles src/worker/index.ts',
       cwd: './',
-      env: {
-        NODE_ENV: 'production',
-        TENANT_ID: 'megamuebles',
-        WORKER_PORT: 3001,
-        DATA_DIR: './data/megamuebles',
-        SUPABASE_PRODUCTS_TABLE: 'products',
-        SUPABASE_COMPANY_INFO_TABLE: 'info_empresa',
-      },
+      env: { NODE_ENV: 'production' },
     },
     {
       name: 'worker-iguazufalls',
       script: './node_modules/.bin/tsx',
-      args: '--env-file=.env.local src/worker/index.ts',
+      args: '--env-file=.env.iguazufalls src/worker/index.ts',
       cwd: './',
-      env: {
-        NODE_ENV: 'production',
-        TENANT_ID: 'iguazufalls',
-        WORKER_PORT: 3002,
-        DATA_DIR: './data/iguazufalls',
-        SUPABASE_PRODUCTS_TABLE: 'products_iguazufalls',
-        SUPABASE_COMPANY_INFO_TABLE: 'info_empresa_iguazufalls',
-      },
+      env: { NODE_ENV: 'production' },
     },
     {
       name: 'worker-impasto',
       script: './node_modules/.bin/tsx',
-      args: '--env-file=.env.local src/worker/index.ts',
+      args: '--env-file=.env.impasto src/worker/index.ts',
       cwd: './',
-      env: {
-        NODE_ENV: 'production',
-        TENANT_ID: 'impasto',
-        WORKER_PORT: 3003,
-        DATA_DIR: './data/impasto',
-        SUPABASE_PRODUCTS_TABLE: 'products_impasto',
-        SUPABASE_COMPANY_INFO_TABLE: 'info_empresa_impasto',
-      },
+      env: { NODE_ENV: 'production' },
     },
   ],
 };

@@ -53,7 +53,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const trimmed = content.trim();
 
   try {
-    await sendMessage(convo.phone, trimmed, process.env.WORKER_INTERNAL_URL ?? tenant.workerUrl);
+    await sendMessage(convo.phone, trimmed, tenant.workerUrl);
   } catch (err) {
     console.error("[messages] Error enviando mensaje:", err);
     return NextResponse.json(

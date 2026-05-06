@@ -9,7 +9,7 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom';
 import { transcribeAudioBuffer } from '../lib/openai';
 import type { WhatsAppProvider, IncomingMessage, ProviderStatus } from './types';
-import { getTenantById, TENANTS } from '../tenants.config';
+import { getTenantById } from '../tenants.config';
 
 const PROVIDER: 'baileys' = 'baileys';
 
@@ -56,7 +56,14 @@ export class BaileysProvider implements WhatsAppProvider {
   private readonly authDir: string;
 
   constructor() {
-    const tenant = getTenantById(process.env.TENANT_ID ?? '') ?? TENANTS[0];
+    const tenantId = process.env.TENANT_ID;
+    if (!tenantId) {
+      throw new Error('[baileys] TENANT_ID env var es obligatorio (revisar PM2 + .env.{tenant})');
+    }
+    const tenant = getTenantById(tenantId);
+    if (!tenant) {
+      throw new Error(`[baileys] TENANT_ID="${tenantId}" no existe en tenants.config.ts`);
+    }
     this.authDir = path.join(tenant.dataDir, 'baileys-auth');
     console.log(`[baileys] Tenant: ${tenant.id} | authDir: ${this.authDir}`);
   }

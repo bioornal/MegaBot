@@ -11,12 +11,12 @@ export async function GET() {
   }
 
   const tenant = await getSessionTenant();
-  // En dev, WORKER_INTERNAL_URL apunta al único worker corriendo (puerto real).
-  // En producción no está seteado → usa el workerUrl del tenant (3001/3002/3003).
-  const workerUrl = tenant?.workerUrl ?? process.env.WORKER_INTERNAL_URL ?? 'http://localhost:3001';
+  if (!tenant) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   try {
-    const res = await fetch(`${workerUrl}/status`, {
+    const res = await fetch(`${tenant.workerUrl}/status`, {
       signal: AbortSignal.timeout(2000),
       cache: 'no-store',
     });
@@ -26,7 +26,7 @@ export async function GET() {
     return NextResponse.json({
       status: 'disconnected',
       provider: 'baileys',
-      error: 'Worker no disponible — ¿corrés npm run worker:dev?',
+      error: `Worker ${tenant.id} no disponible (${tenant.workerUrl}).`,
     });
   }
 }

@@ -194,7 +194,9 @@ export async function POST(req: NextRequest) {
     await sleep(delayMs);
 
     insertMessage(convo.id, "assistant", reply);
-    await sendMessage(phone, reply);
+    // El webhook YCloud no es multi-tenant; en baileys este path no se usa.
+    // sendMessage ignora workerUrl cuando WHATSAPP_PROVIDER=ycloud.
+    await sendMessage(phone, reply, "");
     console.log(`[webhook] -> Enviado a ${phone}`);
   } catch (err) {
     console.error("[webhook] Error interno:", err);

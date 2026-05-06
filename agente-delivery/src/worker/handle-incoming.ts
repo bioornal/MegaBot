@@ -5,13 +5,24 @@ import { getCatalogContext } from '../lib/catalog';
 import { getCompanyInfoContext } from '../lib/company-info';
 import { randomDelayMs, sleep } from '../lib/delay';
 import type { WhatsAppProvider, IncomingMessage } from '../providers/types';
-import { getTenantById, TENANTS } from '../tenants.config';
+import { getTenantById } from '../tenants.config';
 
 const AI_REPLY_DELAY_MIN_MS = 3_000;
 const AI_REPLY_DELAY_MAX_MS = 20_000;
 const AI_REPLY_DELAY_ENABLED = process.env.AI_REPLY_DELAY !== 'false';
 
-const _tenant = getTenantById(process.env.TENANT_ID ?? '') ?? TENANTS[0];
+function loadTenantOrThrow() {
+  const id = process.env.TENANT_ID;
+  if (!id) {
+    throw new Error('[handler] TENANT_ID env var es obligatorio (revisar PM2 + .env.{tenant})');
+  }
+  const t = getTenantById(id);
+  if (!t) {
+    throw new Error(`[handler] TENANT_ID="${id}" no existe en tenants.config.ts`);
+  }
+  return t;
+}
+const _tenant = loadTenantOrThrow();
 const SYSTEM_PROMPT = buildSystemPrompt(_tenant.botName, _tenant.name);
 const db = getDb(_tenant.dataDir);
 const {
