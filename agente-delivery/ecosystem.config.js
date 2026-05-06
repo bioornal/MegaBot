@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'next',
       script: 'npm',
-      args: 'run next:start',
+      args: 'run start',
       cwd: './',
       env: {
         NODE_ENV: 'production',
