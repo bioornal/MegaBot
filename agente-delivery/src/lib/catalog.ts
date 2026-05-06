@@ -49,7 +49,12 @@ function numberValue(row: ProductRow, column: string): number | null {
 }
 
 function getCategoryName(row: ProductRow): string {
-  return row.categories?.name ?? "";
+  const cats = row.categories as unknown;
+  if (cats && typeof cats === "object" && "name" in cats) {
+    return String((cats as { name?: unknown }).name ?? "");
+  }
+  if (typeof cats === "string") return cats;
+  return "";
 }
 
 function formatPrice(raw: string | number | null): string {
@@ -154,15 +159,9 @@ function isOfferQuery(query: string): boolean {
   );
 }
 
-async function fetchProducts(table?: string): Promise<ProductRow[]> {
-  const config = getSupabaseConfig(table);
-  if (!config.url || !config.anonKey || !config.table) return [];
-
-  const cached = cache.get(config.table);
-  if (cached && cached.expiresAt > Date.now()) return cached.rows;
-
+async function fetchProductRows(config: ReturnType<typeof getSupabaseConfig>, select: string): Promise<{ ok: true; rows: ProductRow[] } | { ok: false; status: number; body: string }> {
   const endpoint = new URL(`${config.url}/rest/v1/${config.table}`);
-  endpoint.searchParams.set("select", "*,categories(name)");
+  endpoint.searchParams.set("select", select);
   endpoint.searchParams.set("limit", String(MAX_PRODUCTS));
 
   const res = await fetch(endpoint, {
@@ -174,11 +173,35 @@ async function fetchProducts(table?: string): Promise<ProductRow[]> {
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Supabase catalog error ${res.status}: ${body}`);
+    return { ok: false, status: res.status, body };
   }
 
   const rows = (await res.json()) as ProductRow[];
-  const entry = { expiresAt: Date.now() + CACHE_TTL_MS, rows: Array.isArray(rows) ? rows : [] };
+  return { ok: true, rows: Array.isArray(rows) ? rows : [] };
+}
+
+async function fetchProducts(table?: string): Promise<ProductRow[]> {
+  const config = getSupabaseConfig(table);
+  if (!config.url || !config.anonKey || !config.table) return [];
+
+  const cached = cache.get(config.table);
+  if (cached && cached.expiresAt > Date.now()) return cached.rows;
+
+  // Intento 1: embed de categories via FK (esquema legacy: products → categories)
+  let result = await fetchProductRows(config, "*,categories(name)");
+
+  // Si la tabla del tenant no tiene FK a categories (PGRST200), reintenta sin embed.
+  // Las tablas products_{tenant} traen "categories" como columna jsonb.
+  if (!result.ok && result.status === 400 && result.body.includes("PGRST200")) {
+    console.warn(`[catalog] tabla "${config.table}" sin FK a categories — reintentando sin embed.`);
+    result = await fetchProductRows(config, "*");
+  }
+
+  if (!result.ok) {
+    throw new Error(`Supabase catalog error ${result.status}: ${result.body}`);
+  }
+
+  const entry = { expiresAt: Date.now() + CACHE_TTL_MS, rows: result.rows };
   cache.set(config.table, entry);
   return entry.rows;
 }
@@ -664,7 +687,7 @@ export async function getCatalogContext(query: string, table?: string): Promise<
       ...matches.map(formatGroup),
     ].join("\n");
   } catch (err) {
-    console.error(err);
-    return "Error consultando catálogo.";
+    console.error("[catalog] error:", err);
+    return "";
   }
 }
