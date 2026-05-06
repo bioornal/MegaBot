@@ -1,4 +1,4 @@
-# MegaBot — Contexto del proyecto
+ MegaBot — Contexto del proyecto
 
 ## Qué es
 Dashboard multi-tenant de operador para gestionar conversaciones de WhatsApp de **3 empresas independientes** en un solo Next.js:
@@ -73,7 +73,7 @@ agente-delivery/
 │   │   ├── tenant.ts                   getSessionTenant() helper
 │   │   ├── db.ts                       getDb(dataDir) factory + backward-compat
 │   │   ├── system-prompt.ts            buildSystemPrompt(botName, companyName)
-│   │   ├── send-message.ts             workerUrl param opcional
+│   │   ├── send-message.ts             workerUrl param requerido (sin fallback env)
 │   │   ├── catalog.ts                  Fetch Supabase productos
 │   │   ├── company-info.ts             Fetch Supabase info_empresa
 │   │   ├── delay.ts                    randomDelayMs + sleep
@@ -127,48 +127,77 @@ agente-delivery/
 3. Si modo AI → consulta catálogo + empresa → OpenAI → delay → envía
 4. Dashboard (polling 10s) muestra el mensaje
 
-## Variables de entorno necesarias (.env.local)
+## Variables de entorno
 
+### `.env.local` — Solo vars compartidas (Next.js + todos los workers)
 ```
-# Auth Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
 SUPABASE_SERVICE_ROLE_KEY=xxx
-
-# AI
 OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+WHATSAPP_PROVIDER=baileys
+```
 
-# WhatsApp
-WHATSAPP_PROVIDER=baileys  # o ycloud
+### `.env.{tenant}` — Vars por tenant (generadas por `setup-vps.sh`)
+Cada worker carga su propio archivo via `--env-file=.env.{tenant}` en `ecosystem.config.js`.
+**NUNCA poner TENANT_ID/WORKER_PORT/DATA_DIR en `.env.local`** — contamina los otros workers.
 
-# Worker (por tenant, ver ecosystem.config.js)
+```
 TENANT_ID=megamuebles
 WORKER_PORT=3001
 DATA_DIR=./data/megamuebles
-WORKER_INTERNAL_URL=http://localhost:3001
-
-# Supabase catálogo (opcional)
 SUPABASE_PRODUCTS_TABLE=products
 SUPABASE_COMPANY_INFO_TABLE=info_empresa
+# + todas las vars compartidas repetidas para que el worker sea autónomo
 ```
+
+Los 3 archivos (`.env.megamuebles`, `.env.iguazufalls`, `.env.impasto`) están gitignored.
+Templates disponibles en `.env.megamuebles.example` etc.
 
 ## Deployment producción
 
+### Deploy normal (solo código)
 ```bash
-# VPS Hostinger
 ssh root@2.24.72.12
 cd MegaBot/agente-delivery
 git pull
-npm install
 npm run build
-pm2 start ecosystem.config.js
-pm2 status  # ver los 4 procesos
+pm2 restart all   # basta si NO cambiaron .env files ni ecosystem.config.js
 ```
+
+### Deploy con cambios de env o ecosystem.config.js
+```bash
+# pm2 restart NO recarga env — hay que matar el daemon:
+pm2 kill && pm2 start ecosystem.config.js
+pm2 save
+```
+
+### Bootstrap completo (primera vez o reset total)
+```bash
+bash scripts/setup-vps.sh
+# Genera los 3 .env.{tenant}, npm install, build, pm2 kill+start+save
+```
+
+### Rotar OpenAI key en VPS
+```bash
+NEW_KEY=sk-proj-...
+sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$NEW_KEY|" .env.local .env.megamuebles .env.iguazufalls .env.impasto
+pm2 kill && pm2 start ecosystem.config.js
+```
+
+### Verificar tenants arrancados
+```bash
+pm2 logs --lines 20 --nostream | grep -E "boot|FATAL"
+# Cada worker imprime: [worker] boot | tenant=X | port=N | dataDir=...
+```
+
+### Multi-browser — dashboard isolation
+Supabase Auth usa una cookie por dominio por browser. Para ver 2 dashboards simultáneos del mismo servidor, usar **2 perfiles de Chrome distintos** (o Chrome + Firefox). El mismo perfil siempre mostrará los datos del último tenant logueado.
 
 ## Issues conocidos (pendientes de fix)
 - **CRÍTICO**: `webhook/route.ts` bloquea HTTP 15-25s → YCloud puede reintentar (duplicados). Fix: fire-and-forget async.
 - **IMPORTANTE**: `catalog.ts` + `company-info.ts` sin AbortSignal/timeout en fetch Supabase.
-- **MENOR**: `.env.example` documentar `SUPABASE_URL` + `SUPABASE_ANON_KEY` sin prefijo NEXT_PUBLIC_.
 
 ## Features del dashboard
 - Theming por tenant (colores, branding)
