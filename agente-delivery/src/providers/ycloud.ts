@@ -29,4 +29,16 @@ export class YCloudProvider implements WhatsAppProvider {
   getStatus(): ProviderStatus {
     return this.status;
   }
+
+  async markAsRead(_msg: IncomingMessage): Promise<void> {
+    // YCloud API no soporta read receipts
+  }
+
+  async sendTyping(_to: string): Promise<void> {
+    // YCloud API no soporta typing indicators
+  }
+
+  async stopTyping(_to: string): Promise<void> {
+    // YCloud API no soporta typing indicators
+  }
 }

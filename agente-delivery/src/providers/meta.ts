@@ -19,4 +19,10 @@ export class MetaProvider implements WhatsAppProvider {
   getStatus(): ProviderStatus {
     return 'disconnected';
   }
+
+  async markAsRead(_msg: IncomingMessage): Promise<void> {}
+
+  async sendTyping(_to: string): Promise<void> {}
+
+  async stopTyping(_to: string): Promise<void> {}
 }

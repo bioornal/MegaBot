@@ -3,7 +3,7 @@ import { getAIReply } from '../lib/openai';
 import { buildSystemPrompt } from '../lib/system-prompt';
 import { getCatalogContext } from '../lib/catalog';
 import { getCompanyInfoContext } from '../lib/company-info';
-import { randomDelayMs, sleep } from '../lib/delay';
+import { randomDelayMs, sleep, humanDelayMs } from '../lib/delay';
 import type { WhatsAppProvider, IncomingMessage } from '../providers/types';
 import { getTenantById } from '../tenants.config';
 
@@ -131,6 +131,9 @@ export async function handleIncoming(
   console.log(`[handler] Llamando LLM con ${llmMessages.length} mensajes...`);
   const start = Date.now();
 
+  await provider.markAsRead(msg);
+  await provider.sendTyping(msg.from);
+
   console.log(`[handler] Obteniendo companyInfoContext (tabla: ${_tenant.companyInfoTable})...`);
   const companyInfoContext = await getCompanyInfoContext(_tenant.companyInfoTable);
   console.log(`[handler] companyInfoContext length: ${companyInfoContext.length}`);
@@ -150,9 +153,11 @@ export async function handleIncoming(
   console.log(`[handler] LLM respondio en ${Date.now() - start}ms, reply length: ${reply.length}`);
   console.log(`[handler] LLM reply: "${reply.substring(0, 200)}..."`);
 
+  await provider.stopTyping(msg.from);
+
   if (AI_REPLY_DELAY_ENABLED) {
-    const delayMs = randomDelayMs(AI_REPLY_DELAY_MIN_MS, AI_REPLY_DELAY_MAX_MS);
-    console.log(`[handler] Esperando ${delayMs}ms antes de enviar respuesta IA...`);
+    const delayMs = humanDelayMs(reply.length, AI_REPLY_DELAY_MIN_MS, AI_REPLY_DELAY_MAX_MS);
+    console.log(`[handler] Human delay: ${delayMs}ms para ${reply.length} chars`);
     await sleep(delayMs);
   }
 

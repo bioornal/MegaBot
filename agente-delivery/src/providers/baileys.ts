@@ -112,6 +112,36 @@ export class BaileysProvider implements WhatsAppProvider {
     await this.sock.sendMessage(contactToJid(to), { text });
   }
 
+  async markAsRead(msg: IncomingMessage): Promise<void> {
+    if (!this.sock || this.status !== 'connected') return;
+    const raw = msg.rawPayload as any;
+    if (raw?.key?.id) {
+      try {
+        await this.sock.readMessages([raw.key]);
+      } catch (err) {
+        console.warn('[baileys] markAsRead fallo:', err);
+      }
+    }
+  }
+
+  async sendTyping(to: string): Promise<void> {
+    if (!this.sock || this.status !== 'connected') return;
+    try {
+      await this.sock.sendPresenceUpdate('composing', contactToJid(to));
+    } catch (err) {
+      console.warn('[baileys] sendTyping fallo:', err);
+    }
+  }
+
+  async stopTyping(to: string): Promise<void> {
+    if (!this.sock || this.status !== 'connected') return;
+    try {
+      await this.sock.sendPresenceUpdate('paused', contactToJid(to));
+    } catch (err) {
+      console.warn('[baileys] stopTyping fallo:', err);
+    }
+  }
+
   private async connect(): Promise<void> {
     if (this.stopped) return;
 
@@ -254,6 +284,13 @@ export class BaileysProvider implements WhatsAppProvider {
         };
 
         if (this.handler) {
+          if (!fromMe && msg.key.id && this.sock) {
+            try {
+              await this.sock.readMessages([msg.key]);
+            } catch {
+              // ignore read failures
+            }
+          }
           await this.handler(normalized).catch((err) => {
             console.error('[baileys] Error procesando mensaje:', err);
           });

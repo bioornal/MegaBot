@@ -30,5 +30,8 @@ export interface WhatsAppProvider {
   sendMessage(to: string, text: string): Promise<void>;
   onMessage(handler: (msg: IncomingMessage) => Promise<void>): void;
   getStatus(): ProviderStatus;
-  getQrCode?(): string | null; // sólo Baileys lo implementa
+  getQrCode?(): string | null;
+  markAsRead(msg: IncomingMessage): Promise<void>;
+  sendTyping(to: string): Promise<void>;
+  stopTyping(to: string): Promise<void>;
 }
