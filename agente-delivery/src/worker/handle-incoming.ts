@@ -110,12 +110,46 @@ async function buildIguazufallsExtras(
   return blocks.join('\n\n');
 }
 
+export async function confirmReservationFromState(
+  conversationId: number,
+  partial: Required<Pick<ReservationState, 'cabana' | 'check_in' | 'check_out' | 'personas' | 'huesped_nombre' | 'huesped_telefono' | 'total' | 'sena'>>
+): Promise<{ event_id: string }> {
+  const cabanas = await fetchCabanas(_tenant.productsTable);
+  const cabana = getCabanaByName(cabanas, partial.cabana);
+  if (!cabana) throw new Error(`Cabaña no encontrada: ${partial.cabana}`);
+
+  const eventId = await createReservationEvent({
+    calendarId: cabana.calendar_id,
+    cabana: cabana.nombre,
+    huespedNombre: partial.huesped_nombre,
+    huespedTelefono: partial.huesped_telefono,
+    personas: partial.personas,
+    checkIn: partial.check_in,
+    checkOut: partial.check_out,
+    total: partial.total,
+    sena: partial.sena,
+  });
+
+  const newState: ReservationState = {
+    step: 'awaiting_receipt',
+    ...partial,
+    cabana: cabana.nombre,
+    calendar_id: cabana.calendar_id,
+    event_id: eventId,
+  };
+  db.setReservationState(conversationId, serializeState(newState));
+  return { event_id: eventId };
+}
+
 const ADMIN_HELP =
   'Comandos disponibles:\n' +
   '#ia NUMERO — activar modo IA\n' +
   '#humano NUMERO — activar modo humano\n' +
-  '#reset NUMERO — borrar memoria\n\n' +
-  'Ejemplo: #humano 5491112345678';
+  '#reset NUMERO — borrar memoria\n' +
+  (IS_IGUAZU
+    ? '#reservar TEL "CABAÑA" CHECKIN CHECKOUT PERS TOTAL SEÑA "NOMBRE" — crear reserva manual\n'
+    : '') +
+  '\nEjemplo: #humano 5491112345678';
 
 async function handleAdminCommand(
   msg: IncomingMessage,
@@ -123,6 +157,40 @@ async function handleAdminCommand(
 ): Promise<void> {
   const parts = msg.text.trim().split(/\s+/);
   const cmd = parts[0].toLowerCase();
+
+  if (cmd === '#reservar' && IS_IGUAZU) {
+    // Sintaxis: #reservar <tel> "<cabana>" <YYYY-MM-DD> <YYYY-MM-DD> <pers> <total> <sena> "<nombre>"
+    const tokens = msg.text.trim().match(/(?:[^\s"]+|"[^"]*")+/g) ?? [];
+    if (tokens.length < 9) {
+      await provider.sendMessage(msg.from, 'Uso: #reservar <tel> "<cabana>" <ci> <co> <pers> <total> <sena> "<nombre>"');
+      return;
+    }
+    const unq = (s: string) => s.replace(/^"|"$/g, '');
+    const [, tel, cab, ci, co, pers, total, sena, nom] = tokens.map(unq);
+    try {
+      const phoneDigits = tel.replace(/\D/g, '');
+      const targetConvo = getConversationByPhone(phoneDigits);
+      if (!targetConvo) {
+        await provider.sendMessage(msg.from, `No encontré conversación con ${tel}.`);
+        return;
+      }
+      const r = await confirmReservationFromState(targetConvo.id, {
+        cabana: cab,
+        check_in: ci,
+        check_out: co,
+        personas: parseInt(pers, 10),
+        total: parseInt(total, 10),
+        sena: parseInt(sena, 10),
+        huesped_nombre: nom,
+        huesped_telefono: '+' + phoneDigits,
+      });
+      await provider.sendMessage(msg.from, `✓ Reserva creada en Calendar (${r.event_id}). Estado: awaiting_receipt.`);
+    } catch (e: any) {
+      await provider.sendMessage(msg.from, `✗ Error: ${e.message}`);
+    }
+    return;
+  }
+
   const digits = (parts[1] ?? '').replace(/\D/g, '');
 
   if (!digits) {
