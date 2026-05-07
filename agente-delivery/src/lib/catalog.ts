@@ -691,3 +691,65 @@ export async function getCatalogContext(query: string, table?: string): Promise<
     return "";
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// IguazuFalls — cabañas (esquema nuevo en products_iguazufalls)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface CabanaRow {
+  nombre: string;
+  tipo: 'Studio' | 'Lodge' | 'Duplex';
+  descripcion: string;
+  capacidad_min: number;
+  capacidad_max: number;
+  metros2: number;
+  amenidades: string;
+  precio_baja: number;
+  precio_media: number;
+  precio_alta: number;
+  calendar_id: string;
+  activo: boolean;
+}
+
+export async function fetchCabanas(table = 'products_iguazufalls'): Promise<CabanaRow[]> {
+  const SUPA_URL = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').replace(/\/+$/, '');
+  const SUPA_KEY =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!SUPA_URL || !SUPA_KEY) return [];
+
+  const url = `${SUPA_URL}/rest/v1/${table}?activo=eq.true&select=*`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 5000);
+  try {
+    const res = await fetch(url, {
+      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return [];
+    return (await res.json()) as CabanaRow[];
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Filtra cabañas activas cuya capacidad incluye al número de personas dado.
+ * (capacidad_min <= personas <= capacidad_max)
+ */
+export async function findCabanasByCapacity(
+  personas: number,
+  table = 'products_iguazufalls'
+): Promise<CabanaRow[]> {
+  const all = await fetchCabanas(table);
+  return all.filter((c) => personas >= c.capacidad_min && personas <= c.capacidad_max);
+}
+
+export function getCabanaByName(rows: CabanaRow[], name: string): CabanaRow | null {
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  const target = norm(name);
+  return rows.find((r) => norm(r.nombre) === target) ?? null;
+}
