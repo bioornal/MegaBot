@@ -53,3 +53,52 @@ export async function checkAvailability(
   const busy = res.data.calendars?.[calendarId]?.busy ?? [];
   return busy.length === 0;
 }
+
+export interface ReservationEventInput {
+  calendarId: string;
+  cabana: string;
+  huespedNombre: string;
+  huespedTelefono: string;
+  personas: number;
+  checkIn: string;   // YYYY-MM-DD
+  checkOut: string;  // YYYY-MM-DD
+  total: number;
+  sena: number;
+}
+
+/**
+ * Crea un evento PENDIENTE en el calendario de la cabaña.
+ * Devuelve el eventId. El operador renombra a CONFIRMADA manualmente.
+ */
+export async function createReservationEvent(
+  input: ReservationEventInput
+): Promise<string> {
+  const cal = getClient();
+  const tz = process.env.GOOGLE_CALENDAR_TIMEZONE || 'America/Argentina/Buenos_Aires';
+
+  const summary = `⏳ PENDIENTE — ${input.huespedNombre} (${input.personas}p)`;
+  const description = [
+    `Teléfono: ${input.huespedTelefono}`,
+    `Cabaña: ${input.cabana}`,
+    `Personas: ${input.personas}`,
+    `Check-in: ${input.checkIn} 14:00`,
+    `Check-out: ${input.checkOut} 10:00`,
+    `Total: $${input.total.toLocaleString('es-AR')}`,
+    `Seña (50%): $${input.sena.toLocaleString('es-AR')}`,
+    `Estado seña: PENDIENTE`,
+  ].join('\n');
+
+  const res = await cal.events.insert({
+    calendarId: input.calendarId,
+    requestBody: {
+      summary,
+      description,
+      start: { dateTime: `${input.checkIn}T14:00:00`, timeZone: tz },
+      end:   { dateTime: `${input.checkOut}T10:00:00`, timeZone: tz },
+    },
+  });
+
+  const id = res.data.id;
+  if (!id) throw new Error('[calendar-gcal] La creación del evento no devolvió id');
+  return id;
+}
