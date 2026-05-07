@@ -6,6 +6,12 @@ import { getCompanyInfoContext } from '../lib/company-info';
 import { randomDelayMs, sleep, humanDelayMs } from '../lib/delay';
 import type { WhatsAppProvider, IncomingMessage } from '../providers/types';
 import { getTenantById } from '../tenants.config';
+import { detectIntent, extractPeople } from '../lib/intent-iguazufalls';
+import { findCabanasByCapacity, fetchCabanas, getCabanaByName } from '../lib/catalog';
+import { checkAvailability, createReservationEvent } from '../lib/calendar-gcal';
+import { getSeason } from '../lib/season';
+import { parseState, serializeState, type ReservationState } from '../lib/reservation-state';
+import { verifyPaymentReceipt } from '../lib/verify-payment';
 
 const AI_REPLY_DELAY_MIN_MS = 3_000;
 const AI_REPLY_DELAY_MAX_MS = 20_000;
@@ -35,6 +41,74 @@ const {
   clearMessages,
 } = db;
 console.log(`[handler] Tenant: ${_tenant.id} | DB: ${_tenant.dataDir}`);
+
+const IS_IGUAZU = _tenant.id === 'iguazufalls';
+
+async function buildIguazufallsExtras(
+  msg: IncomingMessage,
+  conversationId: number
+): Promise<string> {
+  // Cargar estado de reserva del SQLite (vacío si nunca se inició una reserva).
+  const stateJson = db.getReservationState(conversationId);
+  const state: ReservationState | null = parseState(stateJson);
+  const intent = detectIntent(msg.text ?? '', !!msg.mediaUrl);
+  const blocks: string[] = [];
+
+  // === Caso COMPROBANTE ===
+  if (intent.intent === 'receipt' && state?.step === 'awaiting_receipt' && msg.mediaUrl && state.sena) {
+    try {
+      const result = await verifyPaymentReceipt({
+        imageUrl: msg.mediaUrl,
+        expectedAmount: state.sena,
+        bankAlias: process.env.BANK_ALIAS ?? 'iguazufalls.test',
+        bankCBU: process.env.BANK_CBU ?? '',
+        bankTitular: process.env.BANK_TITULAR ?? 'IguazuFalls',
+      });
+      const tag = result.ok
+        ? 'OK'
+        : result.issue === 'wrong_account' ? 'WRONG_ACCOUNT'
+        : result.issue === 'amount_mismatch' ? 'AMOUNT_MISMATCH'
+        : 'UNREADABLE';
+      blocks.push(`COMPROBANTE: ${tag}\nDetalle: ${'detail' in result ? result.detail : 'verificado'}`);
+    } catch (e) {
+      blocks.push(`COMPROBANTE: UNREADABLE\nDetalle: error técnico al analizar`);
+    }
+    return blocks.join('\n\n');
+  }
+
+  // === Caso DISPONIBILIDAD ===
+  if (intent.intent === 'availability' && intent.hasPeople) {
+    const personas = extractPeople(msg.text) ?? state?.personas;
+    if (personas) {
+      const candidatas = await findCabanasByCapacity(personas, _tenant.productsTable);
+      if (candidatas.length > 0) {
+        const checkIn = state?.check_in;
+        const lines = [`DISPONIBILIDAD — opciones para ${personas} personas:`];
+        for (const c of candidatas) {
+          let precio = '';
+          let libre = '';
+          if (checkIn && state?.check_out) {
+            const season = getSeason(new Date(checkIn + 'T12:00:00-03:00'));
+            const p = season === 'alta' ? c.precio_alta : season === 'media' ? c.precio_media : c.precio_baja;
+            precio = ` — $${p.toLocaleString('es-AR')}/noche (${season})`;
+            try {
+              const free = await checkAvailability(c.calendar_id, checkIn, state.check_out);
+              libre = free ? ' ✅' : ' ❌ ocupado';
+            } catch {
+              libre = '';
+            }
+          }
+          lines.push(`- ${c.nombre} (${c.capacidad_max}p, ${c.metros2}m²)${precio}${libre}`);
+        }
+        blocks.push(lines.join('\n'));
+      } else {
+        blocks.push(`DISPONIBILIDAD: ninguna cabaña admite ${personas} personas (máximo por unidad: 6).`);
+      }
+    }
+  }
+
+  return blocks.join('\n\n');
+}
 
 const ADMIN_HELP =
   'Comandos disponibles:\n' +
@@ -142,7 +216,13 @@ export async function handleIncoming(
   const catalogContext = await getCatalogContext(msg.text, _tenant.productsTable);
   console.log(`[handler] catalogContext length: ${catalogContext.length}`);
 
-  const fullSystemPrompt = [SYSTEM_PROMPT, companyInfoContext, catalogContext]
+  let extras = '';
+  if (IS_IGUAZU) {
+    extras = await buildIguazufallsExtras(msg, convo.id);
+    console.log(`[handler] iguazufalls extras length: ${extras.length}`);
+  }
+
+  const fullSystemPrompt = [SYSTEM_PROMPT, companyInfoContext, catalogContext, extras]
     .filter(Boolean)
     .join('\n\n');
 
