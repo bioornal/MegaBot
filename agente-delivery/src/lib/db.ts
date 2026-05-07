@@ -14,6 +14,8 @@ export interface DbContext {
   deleteConversation(id: number): void;
   clearMessages(conversationId: number): void;
   getConversationByPhone(phone: string): Conversation | null;
+  getReservationState(conversationId: number): string | null;
+  setReservationState(conversationId: number, json: string | null): void;
 }
 
 const cache = new Map<string, DbContext>();
@@ -48,6 +50,7 @@ export function getDb(dataDir: string): DbContext {
       ON messages(conversation_id, created_at);
   `);
   try { db.exec(`ALTER TABLE messages ADD COLUMN media_url TEXT;`); } catch { /* already exists */ }
+  try { db.exec(`ALTER TABLE conversations ADD COLUMN reservation_state TEXT;`); } catch { /* already exists */ }
 
   const stmts = {
     upsertConversation: db.prepare(`
@@ -71,6 +74,8 @@ export function getDb(dataDir: string): DbContext {
     deleteMessages: db.prepare(`DELETE FROM messages WHERE conversation_id = ?`),
     getConversationByPhone: db.prepare(`SELECT * FROM conversations WHERE phone = ? OR phone LIKE ? LIMIT 1`),
     deleteConversation: db.prepare(`DELETE FROM conversations WHERE id = ?`),
+    getReservationState: db.prepare(`SELECT reservation_state FROM conversations WHERE id = ?`),
+    setReservationState: db.prepare(`UPDATE conversations SET reservation_state = ? WHERE id = ?`),
   };
 
   const insertMessageTx = db.transaction(
@@ -119,6 +124,13 @@ export function getDb(dataDir: string): DbContext {
       const digits = phone.replace(/\D/g, '');
       return (stmts.getConversationByPhone.get(digits, `${digits}@%`) as Conversation) ?? null;
     },
+    getReservationState(conversationId) {
+      const row = stmts.getReservationState.get(conversationId) as { reservation_state: string | null } | undefined;
+      return row?.reservation_state ?? null;
+    },
+    setReservationState(conversationId, json) {
+      stmts.setReservationState.run(json, conversationId);
+    },
   };
 
   cache.set(resolved, ctx);
@@ -140,3 +152,5 @@ export const listConversations = () => getDb(defaultDataDir).listConversations()
 export const deleteConversation = (...args: Parameters<DbContext['deleteConversation']>) => getDb(defaultDataDir).deleteConversation(...args);
 export const clearMessages = (...args: Parameters<DbContext['clearMessages']>) => getDb(defaultDataDir).clearMessages(...args);
 export const getConversationByPhone = (...args: Parameters<DbContext['getConversationByPhone']>) => getDb(defaultDataDir).getConversationByPhone(...args);
+export const getReservationState = (...args: Parameters<DbContext['getReservationState']>) => getDb(defaultDataDir).getReservationState(...args);
+export const setReservationState = (...args: Parameters<DbContext['setReservationState']>) => getDb(defaultDataDir).setReservationState(...args);
