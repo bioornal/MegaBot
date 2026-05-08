@@ -258,7 +258,17 @@ export class BaileysProvider implements WhatsAppProvider {
         const fromMe = msg.key.fromMe ?? false;
         const remoteJid = msg.key.remoteJid ?? '';
         const selfPhone = jidToPhone(this.sock?.user?.id ?? '');
-        const isSelfChat = jidToPhone(remoteJid) === selfPhone;
+        // Baileys puede usar `@s.whatsapp.net` (phone JID) o `@lid` (linked identifier).
+        // Cuando el operador se manda mensajes a sí mismo desde algunos clientes WhatsApp,
+        // remoteJid llega como `<lid>@lid` y no coincide con el phone. Comparamos contra
+        // ambos: id (phone) y lid (si Baileys lo expone).
+        const selfLidJid = (this.sock?.user as any)?.lid as string | undefined;
+        const selfLid = selfLidJid ? jidToPhone(selfLidJid) : '';
+        const remotePart = jidToPhone(remoteJid);
+        const isSelfChat =
+          (fromMe && remoteJid.endsWith('@lid')) ||
+          remotePart === selfPhone ||
+          (selfLid !== '' && remotePart === selfLid);
 
         const externalMessageId = msg.key.id ?? '';
         const timestamp =
