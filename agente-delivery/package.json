@@ -19,7 +19,6 @@
     "start:prod": "concurrently -n next,worker -c cyan,green \"next start\" \"tsx --env-file=.env.megamuebles src/worker/index.ts\""
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@hapi/boom": "^10.0.1",
     "@insforge/sdk": "^1.2.7",
     "@supabase/ssr": "^0.10.2",
@@ -27,6 +26,7 @@
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "better-sqlite3": "^11.0.0",
     "concurrently": "^9.2.1",
+    "googleapis": "^171.4.0",
     "next": "^15.0.0",
     "openai": "^4.0.0",
     "qrcode": "^1.5.4",

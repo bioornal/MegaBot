@@ -224,6 +224,12 @@ OPENAI_MODEL=gpt-4o-mini
 Los 3 archivos (`.env.megamuebles`, `.env.iguazufalls`, `.env.impasto`) están gitignored.
 Templates disponibles en `.env.megamuebles.example` etc.
 
+### Vars exclusivas de IguazuFalls (`.env.iguazufalls`)
+Además de las vars compartidas:
+- `GOOGLE_SERVICE_ACCOUNT_JSON` — JSON del Service Account con permiso sobre los 11 calendarios de Google Calendar (en una sola línea, sin saltos)
+- `GOOGLE_CALENDAR_TIMEZONE=America/Argentina/Buenos_Aires`
+- `BANK_ALIAS`, `BANK_CBU`, `BANK_TITULAR` — datos para validación de comprobantes de transferencia (deben coincidir con los datos en `info_empresa_iguazufalls`)
+
 ## Deployment producción
 
 ### Deploy normal (solo código)
@@ -263,6 +269,29 @@ pm2 logs --lines 20 --nostream | grep -E "boot|FATAL"
 
 ### Multi-browser — dashboard isolation
 Supabase Auth usa una cookie por dominio por browser. Para ver 2 dashboards simultáneos del mismo servidor, usar **2 perfiles de Chrome distintos** (o Chrome + Firefox). El mismo perfil siempre mostrará los datos del último tenant logueado.
+
+### Setup inicial IguazuFalls (una vez)
+1. **Supabase** — las tablas `products_iguazufalls` (schema cabañas: nombre, tipo, capacidad_min/max, precio_baja/media/alta, calendar_id, activo) y `info_empresa_iguazufalls` (key/value: categoria, informacion) ya existen y están pobladas con las 11 cabañas + 17 entradas de info. El seed script `agente-delivery/scripts/seed-iguazufalls.ts` permite re-poblar si hace falta:
+   ```bash
+   cd agente-delivery
+   npx tsx --env-file=.env.iguazufalls scripts/seed-iguazufalls.ts
+   ```
+
+2. **Google Calendar Service Account** (manual, una vez):
+   - Console: https://console.cloud.google.com → crear proyecto `iguazufalls-bot`
+   - APIs & Services → Library → habilitar **Google Calendar API**
+   - Credentials → Create Service Account → Keys → Add Key → JSON → descargar
+   - Copiar el `client_email` del JSON
+   - En cada uno de los 11 calendarios de Google, agregar ese email como invitado con permiso "Hacer cambios y administrar el uso compartido"
+   - Pegar el JSON completo en una sola línea como `GOOGLE_SERVICE_ACCOUNT_JSON=...` en `.env.iguazufalls`
+
+3. **Datos bancarios** — completar `BANK_TITULAR`, `BANK_CBU`, `BANK_ALIAS` en `.env.iguazufalls` y actualizar las filas `banco_titular`, `banco_cbu`, `banco_alias`, `banco_nombre` en `info_empresa_iguazufalls` (Supabase) con los datos reales del operador.
+
+4. **Comando admin de prueba** — desde el WhatsApp del operador hacia sí mismo:
+   ```
+   #reservar 5491100000000 "Lodge Timbó" 2030-01-15 2030-01-18 2 144000 72000 "Test Bot"
+   ```
+   Crea un evento PENDIENTE en el calendario y deja la conversación en estado `awaiting_receipt`. Verificar en Google Calendar y luego borrar manualmente.
 
 ## Issues conocidos (pendientes de fix)
 - **CRÍTICO**: `webhook/route.ts` bloquea HTTP 15-25s → YCloud puede reintentar (duplicados). Fix: fire-and-forget async.
