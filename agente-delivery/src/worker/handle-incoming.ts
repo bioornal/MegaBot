@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { getDb } from '../lib/db';
 import { getAIReply } from '../lib/openai';
 import { buildSystemPrompt } from '../lib/system-prompt';
@@ -46,6 +48,30 @@ console.log(`[handler] Tenant: ${_tenant.id} | DB: ${_tenant.dataDir}`);
 
 const IS_IGUAZU = _tenant.id === 'iguazufalls';
 
+// --- Bypass de verificación de comprobante (solo IguazuFalls) ---
+// Persiste en disco para sobrevivir reinicios del worker.
+// Toggle: #bypass on / #bypass off desde auto-mensaje de WhatsApp.
+const BYPASS_FLAG_FILE = IS_IGUAZU
+  ? path.join(path.resolve(_tenant.dataDir), 'bypass_receipt.flag')
+  : '';
+
+function isBypassActive(): boolean {
+  if (!IS_IGUAZU) return false;
+  return fs.existsSync(BYPASS_FLAG_FILE);
+}
+
+function setBypass(active: boolean): void {
+  if (active) {
+    fs.writeFileSync(BYPASS_FLAG_FILE, '1');
+  } else {
+    try { fs.unlinkSync(BYPASS_FLAG_FILE); } catch { /* ya no existe */ }
+  }
+}
+
+if (IS_IGUAZU) {
+  console.log(`[handler] Bypass comprobante: ${isBypassActive() ? 'ACTIVO' : 'inactivo'}`);
+}
+
 async function buildIguazufallsExtras(
   msg: IncomingMessage,
   conversationId: number
@@ -58,41 +84,56 @@ async function buildIguazufallsExtras(
 
   // === Caso COMPROBANTE ===
   if (intent.intent === 'receipt' && state?.step === 'awaiting_receipt' && msg.mediaUrl && state.sena) {
-    try {
-      const result = await verifyPaymentReceipt({
-        imageUrl: msg.mediaUrl,
-        expectedAmount: state.sena,
-        bankAlias: process.env.BANK_ALIAS ?? 'iguazufalls.test',
-        bankCBU: process.env.BANK_CBU ?? '',
-        bankTitular: process.env.BANK_TITULAR ?? 'IguazuFalls',
-      });
-      const tag = result.ok
-        ? 'OK'
-        : result.issue === 'wrong_account' ? 'WRONG_ACCOUNT'
-        : result.issue === 'amount_mismatch' ? 'AMOUNT_MISMATCH'
-        : 'UNREADABLE';
+    let receiptOk = false;
+    let tag = 'UNREADABLE';
+    let detail = 'error técnico al analizar';
 
-      if (result.ok && state.calendar_id && state.event_id) {
-        try {
-          await updateReservationEvent(
-            state.calendar_id,
-            state.event_id,
-            'confirmed',
-            state.huesped_nombre ?? 'Huésped',
-            state.personas ?? 1,
-          );
-          const confirmed: ReservationState = { ...state, step: 'completed' };
-          db.setReservationState(conversationId, serializeState(confirmed));
-          console.log(`[handler] Evento Calendar confirmado: ${state.event_id}`);
-        } catch (e) {
-          console.error('[handler] Error confirmando evento en Calendar:', e);
-        }
+    if (isBypassActive()) {
+      // Modo test: aceptar cualquier imagen sin verificar
+      receiptOk = true;
+      tag = 'OK';
+      detail = 'bypass activo — verificación omitida (modo test)';
+      console.log('[handler] Bypass activo → comprobante aceptado sin verificar');
+    } else {
+      try {
+        const result = await verifyPaymentReceipt({
+          imageUrl: msg.mediaUrl,
+          expectedAmount: state.sena,
+          bankAlias: process.env.BANK_ALIAS ?? 'iguazufalls.test',
+          bankCBU: process.env.BANK_CBU ?? '',
+          bankTitular: process.env.BANK_TITULAR ?? 'IguazuFalls',
+        });
+        receiptOk = result.ok;
+        tag = result.ok
+          ? 'OK'
+          : result.issue === 'wrong_account' ? 'WRONG_ACCOUNT'
+          : result.issue === 'amount_mismatch' ? 'AMOUNT_MISMATCH'
+          : 'UNREADABLE';
+        detail = 'detail' in result ? result.detail : 'verificado';
+      } catch {
+        tag = 'UNREADABLE';
+        detail = 'error técnico al analizar';
       }
-
-      blocks.push(`COMPROBANTE: ${tag}\nDetalle: ${'detail' in result ? result.detail : 'verificado'}`);
-    } catch (e) {
-      blocks.push(`COMPROBANTE: UNREADABLE\nDetalle: error técnico al analizar`);
     }
+
+    if (receiptOk && state.calendar_id && state.event_id) {
+      try {
+        await updateReservationEvent(
+          state.calendar_id,
+          state.event_id,
+          'confirmed',
+          state.huesped_nombre ?? 'Huésped',
+          state.personas ?? 1,
+        );
+        const completed: ReservationState = { ...state, step: 'completed' };
+        db.setReservationState(conversationId, serializeState(completed));
+        console.log(`[handler] Evento Calendar confirmado: ${state.event_id}`);
+      } catch (e) {
+        console.error('[handler] Error confirmando evento en Calendar:', e);
+      }
+    }
+
+    blocks.push(`COMPROBANTE: ${tag}\nDetalle: ${detail}`);
     return blocks.join('\n\n');
   }
 
@@ -167,7 +208,9 @@ const ADMIN_HELP =
   '#humano NUMERO — activar modo humano\n' +
   '#reset NUMERO — borrar memoria\n' +
   (IS_IGUAZU
-    ? '#reservar TEL "CABAÑA" CHECKIN CHECKOUT PERS TOTAL SEÑA "NOMBRE" — crear reserva manual\n'
+    ? '#reservar TEL "CABAÑA" CHECKIN CHECKOUT PERS TOTAL SEÑA "NOMBRE" — crear reserva manual\n' +
+      '#bypass on — omitir verificación de comprobante (modo test)\n' +
+      '#bypass off — reactivar verificación real de comprobante\n'
     : '') +
   '\nEjemplo: #humano 5491112345678';
 
@@ -177,6 +220,21 @@ async function handleAdminCommand(
 ): Promise<void> {
   const parts = msg.text.trim().split(/\s+/);
   const cmd = parts[0].toLowerCase();
+
+  if (cmd === '#bypass' && IS_IGUAZU) {
+    const mode = (parts[1] ?? '').toLowerCase();
+    if (mode === 'on') {
+      setBypass(true);
+      await provider.sendMessage(msg.from, '🟡 Bypass ON — cualquier imagen se acepta como comprobante válido. Usá solo para pruebas.');
+    } else if (mode === 'off') {
+      setBypass(false);
+      await provider.sendMessage(msg.from, '🟢 Bypass OFF — verificación real de comprobante activada.');
+    } else {
+      const estado = isBypassActive() ? '🟡 ACTIVO (modo test)' : '🟢 inactivo (producción)';
+      await provider.sendMessage(msg.from, `Bypass comprobante: ${estado}\nUso: #bypass on | #bypass off`);
+    }
+    return;
+  }
 
   if (cmd === '#reservar' && IS_IGUAZU) {
     // Sintaxis: #reservar <tel> "<cabana>" <YYYY-MM-DD> <YYYY-MM-DD> <pers> <total> <sena> "<nombre>"
