@@ -7,7 +7,8 @@ export function middleware(request: NextRequest) {
 
   const isPublic =
     pathname.startsWith('/login') ||
-    pathname.startsWith('/auth')
+    pathname.startsWith('/auth') ||
+    pathname.startsWith('/menu')
 
   if (isPublic) return NextResponse.next()
 

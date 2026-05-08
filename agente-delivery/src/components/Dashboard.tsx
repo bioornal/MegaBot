@@ -255,6 +255,7 @@ export default function Dashboard({ tenantName, botName, tenantId }: DashboardPr
                 onDelete={handleDeleteConversation}
                 onResetMemory={handleResetMemory}
                 onBack={handleBack}
+                botName={botName}
               />
             ) : (
               <div style={{

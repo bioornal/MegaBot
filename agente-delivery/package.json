@@ -19,7 +19,9 @@
     "start:prod": "concurrently -n next,worker -c cyan,green \"next start\" \"tsx --env-file=.env.megamuebles src/worker/index.ts\""
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@hapi/boom": "^10.0.1",
+    "@insforge/sdk": "^1.2.7",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.3",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
@@ -39,6 +41,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "dotenv": "^17.4.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.0.0"
   }

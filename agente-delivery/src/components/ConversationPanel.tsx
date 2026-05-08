@@ -40,6 +40,7 @@ interface Props {
   onDelete: (id: number) => Promise<void>;
   onResetMemory: (id: number) => Promise<void>;
   onBack?: () => void;
+  botName: string;
 }
 
 export default function ConversationPanel({
@@ -50,6 +51,7 @@ export default function ConversationPanel({
   onDelete,
   onResetMemory,
   onBack,
+  botName,
 }: Props) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -374,7 +376,7 @@ export default function ConversationPanel({
               ¿Resetear memoria de la IA?
             </h3>
             <p style={{ fontSize: 12.5, marginBottom: 18, color: "#4a6278", lineHeight: 1.55 }}>
-              Se borrará todo el historial de mensajes. Sofía olvidará la conversación y arrancará de cero con este cliente.
+              Se borrará todo el historial de mensajes. {botName} olvidará la conversación y arrancará de cero con este cliente.
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button

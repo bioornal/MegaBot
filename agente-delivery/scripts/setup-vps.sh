@@ -83,6 +83,19 @@ write_env_file .env.megamuebles  megamuebles  3001 ./data/megamuebles  products 
 write_env_file .env.iguazufalls  iguazufalls  3002 ./data/iguazufalls  products_iguazufalls  info_empresa_iguazufalls
 write_env_file .env.impasto      impasto      3003 ./data/impasto      products_impasto      info_empresa_impasto
 
+# Impasto usa Insforge, no Supabase — agregar vars de Insforge si no existen
+if [ -f .env.impasto ]; then
+  if ! grep -qF "INSFORGE_URL" .env.impasto; then
+    cat >> .env.impasto <<'INSEOF'
+
+# Insforge — API para catalogo e info empresa de Impasto
+INSFORGE_URL=
+INSFORGE_ANON_KEY=
+INSEOF
+    echo "  → .env.impasto + vars INSFORGE (completalas manualmente)"
+  fi
+fi
+
 echo
 echo "==> npm install..."
 npm install

@@ -20,6 +20,7 @@ export interface Tenant {
   dataDir: string
   productsTable: string
   companyInfoTable: string
+  dataSource?: 'supabase' | 'insforge'
   theme: TenantTheme
 }
 
@@ -69,8 +70,9 @@ export const TENANTS: Tenant[] = [
     botName: 'Chris',
     workerUrl: 'http://127.0.0.1:3003',
     dataDir: path.resolve('./data/impasto'),
-    productsTable: 'products_impasto',
+    productsTable: 'productos',
     companyInfoTable: 'info_empresa_impasto',
+    dataSource: 'insforge',
     theme: {
       primary:   '#60a5fa',
       accent:    '#2563eb',

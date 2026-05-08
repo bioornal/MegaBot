@@ -6,20 +6,22 @@ Dashboard multi-tenant de operador para **3 empresas independientes** con WhatsA
 - **IguazuFalls** (turismo) — Bot Paula, worker :3002  
 - **Impasto** (restaurant) — Bot Chris, worker :3003
 
-Cada tenant tiene su propia SIM, Baileys session, SQLite DB, y Supabase tables.
+Cada tenant tiene su propia SIM, Baileys session, SQLite DB, y tablas propias (Supabase o Insforge).
 
 ## Estado actual (2026-05-06)
 ✅ Multi-tenant fully operational en VPS Hostinger (2.24.72.12)
-✅ Los 3 bots responden con data propia desde Supabase
+✅ Los 3 bots responden con data propia
 ✅ Saludo único fixeado (no repetir)
 ✅ PM2 env cacheing y RLS gotchas resueltos
+✅ Impasto migrado a Insforge (catálogo separado de Supabase)
 
 ## Tech stack
 - **Frontend**: Next.js 15 (App Router), React, Tailwind CSS v4
 - **Bot/Worker**: Node.js + tsx, 3 procesos (one per tenant)
 - **WhatsApp**: Baileys (JS web scraper) por defecto, YCloud como alternativa
-- **AI**: OpenAI API (gpt-4o-mini)
-- **DB**: SQLite via better-sqlite3 (`data/{tenant}/messages.db`) + Supabase (catálogo)
+- **AI**: OpenAI API (gpt-4o-mini, max_tokens: 200, temperature: 0.4)
+- **DB**: SQLite via better-sqlite3 (`data/{tenant}/messages.db`)
+- **Catálogo**: Supabase (megamuebles, iguazufalls) + **Insforge** (Impasto)
 - **Auth**: Supabase Auth + httpOnly cookie `tenant-id`
 - **PM2**: 4 procesos en prod (1 Next.js + 3 workers)
 
@@ -62,7 +64,7 @@ pm2 kill && pm2 start ecosystem.config.js
 1. WhatsApp entra vía Baileys → `handleIncoming(msg, provider)`
 2. `handle-incoming.ts` carga DB + sistema prompt usando TENANT_ID del env
 3. Si modo AI:
-   - Fetch catálogo + company info desde Supabase
+   - Fetch catálogo + company info desde Supabase o **Insforge** (según `dataSource` del tenant)
    - OpenAI con full system prompt
    - Delay (3-20s random si `AI_REPLY_DELAY=true`)
    - Envía respuesta
