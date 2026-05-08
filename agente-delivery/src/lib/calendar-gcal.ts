@@ -67,8 +67,35 @@ export interface ReservationEventInput {
 }
 
 /**
+ * Actualiza el título y descripción de un evento existente.
+ * Usado para pasar de PENDIENTE → CONFIRMADO una vez verificado el comprobante.
+ */
+export async function updateReservationEvent(
+  calendarId: string,
+  eventId: string,
+  status: 'confirmed' | 'cancelled',
+  huespedNombre: string,
+  personas: number
+): Promise<void> {
+  const cal = getClient();
+  const emoji = status === 'confirmed' ? '✅' : '❌';
+  const label = status === 'confirmed' ? 'CONFIRMADO' : 'CANCELADO';
+  const summary = `${emoji} ${label} — ${huespedNombre} (${personas}p)`;
+
+  const existing = await cal.events.get({ calendarId, eventId });
+  const prevDescription = existing.data.description ?? '';
+  const description = prevDescription.replace('Estado seña: PENDIENTE', `Estado seña: ${label}`);
+
+  await cal.events.patch({
+    calendarId,
+    eventId,
+    requestBody: { summary, description },
+  });
+}
+
+/**
  * Crea un evento PENDIENTE en el calendario de la cabaña.
- * Devuelve el eventId. El operador renombra a CONFIRMADA manualmente.
+ * Devuelve el eventId.
  */
 export async function createReservationEvent(
   input: ReservationEventInput

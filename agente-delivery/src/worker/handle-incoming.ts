@@ -10,7 +10,7 @@ import type { WhatsAppProvider, IncomingMessage } from '../providers/types';
 import { getTenantById } from '../tenants.config';
 import { detectIntent, extractPeople } from '../lib/intent-iguazufalls';
 import { findCabanasByCapacity, fetchCabanas, getCabanaByName } from '../lib/catalog';
-import { checkAvailability, createReservationEvent } from '../lib/calendar-gcal';
+import { checkAvailability, createReservationEvent, updateReservationEvent } from '../lib/calendar-gcal';
 import { getSeason } from '../lib/season';
 import { parseState, serializeState, type ReservationState } from '../lib/reservation-state';
 import { verifyPaymentReceipt } from '../lib/verify-payment';
@@ -71,6 +71,24 @@ async function buildIguazufallsExtras(
         : result.issue === 'wrong_account' ? 'WRONG_ACCOUNT'
         : result.issue === 'amount_mismatch' ? 'AMOUNT_MISMATCH'
         : 'UNREADABLE';
+
+      if (result.ok && state.calendar_id && state.event_id) {
+        try {
+          await updateReservationEvent(
+            state.calendar_id,
+            state.event_id,
+            'confirmed',
+            state.huesped_nombre ?? 'Huésped',
+            state.personas ?? 1,
+          );
+          const confirmed: ReservationState = { ...state, step: 'completed' };
+          db.setReservationState(conversationId, serializeState(confirmed));
+          console.log(`[handler] Evento Calendar confirmado: ${state.event_id}`);
+        } catch (e) {
+          console.error('[handler] Error confirmando evento en Calendar:', e);
+        }
+      }
+
       blocks.push(`COMPROBANTE: ${tag}\nDetalle: ${'detail' in result ? result.detail : 'verificado'}`);
     } catch (e) {
       blocks.push(`COMPROBANTE: UNREADABLE\nDetalle: error técnico al analizar`);
