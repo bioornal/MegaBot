@@ -509,9 +509,12 @@ export async function handleIncoming(
     console.log(`[handler] iguazufalls extras length: ${extras.length}`);
   }
 
-  // IguazuFalls: wiki context (siempre) + clima (si preguntan)
+  // IguazuFalls: fecha actual (SIEMPRE, para que Paula sepa el año/mes/día) + wiki + clima
   let iguazuExtraContext = '';
   if (IS_IGUAZU) {
+    const now = new Date();
+    const hoy = now.toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' });
+    iguazuExtraContext += `\n\nFECHA ACTUAL: Hoy es ${hoy} (huso horario Argentina, GMT-3). Usá este dato para interpretar fechas relativas como "el mes que viene", "la semana que viene", etc. El año actual es ${now.getFullYear()}.`;
     const wikiCtx = await getIguazuWikiContext();
     if (wikiCtx) iguazuExtraContext += '\n\n' + wikiCtx;
 
