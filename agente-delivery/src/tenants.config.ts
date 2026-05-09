@@ -16,6 +16,7 @@ export interface Tenant {
   email: string
   name: string
   botName: string
+  model?: string
   workerUrl: string
   dataDir: string
   productsTable: string
@@ -49,6 +50,7 @@ export const TENANTS: Tenant[] = [
     email: 'juanynatyzapata@hotmail.com',
     name: 'IguazuFalls',
     botName: 'Paula',
+    model: 'gpt-4.1-mini',
     workerUrl: 'http://127.0.0.1:3002',
     dataDir: path.resolve('./data/iguazufalls'),
     productsTable: 'products_iguazufalls',

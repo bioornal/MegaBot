@@ -16,6 +16,8 @@ import { checkAvailability, createReservationEvent, updateReservationEvent } fro
 import { getSeason } from '../lib/season';
 import { parseState, serializeState, type ReservationState } from '../lib/reservation-state';
 import { verifyPaymentReceipt } from '../lib/verify-payment';
+import { getIguazuWikiContext } from '../lib/iguazu-context';
+import { getWeatherContext } from '../lib/weather';
 
 const AI_REPLY_DELAY_MIN_MS = 3_000;
 const AI_REPLY_DELAY_MAX_MS = 25_000;
@@ -200,6 +202,14 @@ async function buildIguazufallsExtras(
         } catch {}
       }
 
+      // Validar que haya fechas — sin fechas NO listamos cabañas
+      if (!checkIn || !checkOut) {
+        blocks.push(
+          `DISPONIBILIDAD: SIN FECHAS — INSTRUCCIÓN: el cliente mencionó ${personas} personas pero NO dio fechas. NO listes cabañas. Respondé en su idioma pidiendo las fechas de entrada y salida. Sé breve.`
+        );
+        return blocks.join('\n\n');
+      }
+
       // Validar fechas pasadas
       if (checkIn && checkOut) {
         const today = new Date();
@@ -218,9 +228,7 @@ async function buildIguazufallsExtras(
         const lines = [
           `DISPONIBILIDAD — INSTRUCCIÓN: copiá la siguiente lista TAL CUAL en tu respuesta al cliente, en su idioma. NO digas "voy a verificar" ni "un momento" — la información ya está acá. Si una cabaña tiene "❌ ocupado" NO la ofrezcas como opción reservable; ofrecé solo las que tienen "✅".`,
           ``,
-          checkIn && checkOut
-            ? `Opciones para ${personas} personas (${checkIn} → ${checkOut}):`
-            : `Opciones para ${personas} personas:`,
+          `Opciones para ${personas} personas (${checkIn} → ${checkOut}):`,
         ];
         for (const c of candidatas) {
           let precio = '';
@@ -494,11 +502,30 @@ export async function handleIncoming(
     }
   }
 
-  // Extras: solo IguazuFalls (DISPONIBILIDAD / COMPROBANTE)
+  // Extras: solo IguazuFalls (DISPONIBILIDAD / COMPROBANTE / CLIMA / WIKI)
   let extras = '';
   if (IS_IGUAZU) {
     extras = await buildIguazufallsExtras(msg, convo.id);
     console.log(`[handler] iguazufalls extras length: ${extras.length}`);
+  }
+
+  // IguazuFalls: wiki context (siempre) + clima (si preguntan)
+  let iguazuExtraContext = '';
+  if (IS_IGUAZU) {
+    const wikiCtx = await getIguazuWikiContext();
+    if (wikiCtx) iguazuExtraContext += '\n\n' + wikiCtx;
+
+    const weatherKeywords = /\b(clim|clie|tiemp|temp|llov|lluev|lluv|rain|weather|forecast|sol|calor|cald|calur|cool|chuva|chov|chuvis|tempo|quente|fr[ií]o|fresc|umid|moist|humid|storm|torment|vien|vent|wind|pron[oó]st|previs|neblin|niebla|nublad|frost|helad|graniz)/i;
+    if (weatherKeywords.test(msg.text)) {
+      const detectedLang = /^(?!.*[\u00e0-\u00ff]).*[a-zA-Z]/.test(msg.text) && !/[\u00f1\u00e1\u00e9\u00ed\u00f3\u00fa]/.test(msg.text)
+        ? 'en'
+        : /(?:obrigad|t[eê]m|qual|como|chov|quis|quero|pod|podem|gost|querem|previs|hoje)/i.test(msg.text)
+          ? 'pt'
+          : 'es';
+      const weatherCtx = await getWeatherContext(detectedLang);
+      if (weatherCtx) iguazuExtraContext += '\n\n' + weatherCtx;
+      console.log(`[handler] Weather context injected for Paula (lang=${detectedLang})`);
+    }
   }
 
   // Si el sistema ya verificó el comprobante (bloque COMPROBANTE: presente),
@@ -514,12 +541,12 @@ export async function handleIncoming(
 
   const fullSystemPrompt = [SYSTEM_PROMPT, companyInfoContext, catalogContext, extras]
     .filter(Boolean)
-    .join('\n\n') + cartContext;
+    .join('\n\n') + cartContext + iguazuExtraContext;
 
   console.log(`[handler] fullSystemPrompt length: ${fullSystemPrompt.length}`);
   console.log(`[handler] llmMessages:`, llmMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content.substring(0, 50) : '[multi]' })));
 
-  const reply = await getAIReply(llmMessages, fullSystemPrompt);
+  const reply = await getAIReply(llmMessages, fullSystemPrompt, _tenant.model);
   console.log(`[handler] LLM respondio en ${Date.now() - start}ms, reply length: ${reply.length}`);
   console.log(`[handler] LLM reply: "${reply.substring(0, 200)}..."`);
 

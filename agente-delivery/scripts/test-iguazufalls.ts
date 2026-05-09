@@ -571,6 +571,171 @@ const SIMULACIONES: Sim[] = [
       '✅ NO crea evento en Calendar',
     ],
   },
+  // ── NUEVAS FUNCIONALIDADES 2026-05: Info Zona, Clima, No Inventar, Info Empresa ──
+  {
+    id: 31,
+    nombre: 'INFO ZONA — preguntas sobre cataratas y zona (debe usar Wikipedia, NO redirigir al sitio)',
+    steps: [
+      { txt: 'Hola, qué sabés de las Cataratas del Iguazú?' },
+      { txt: 'A qué distancia están de Ciudad del Este?' },
+      { txt: 'Se puede visitar también el lado brasilero?' },
+      { txt: 'Qué otros lugares turísticos hay cerca?' },
+    ],
+    checks: [
+      '✅ Paula usa el bloque INFO ZONA y responde con info real de Wikipedia',
+      '✅ NO redirige al sitio web para preguntas de la zona',
+      '✅ No dice "no tengo esa información"',
+      '✅ Distancias y datos turísticos aproximados correctos',
+    ],
+  },
+  {
+    id: 32,
+    nombre: 'CLIMA — preguntas de tiempo con múltiples variantes',
+    steps: [
+      { txt: 'Hola, cómo va a estar el tiempo mañana en Puerto Iguazú?' },
+      { txt: 'Hace mucho calor en esta época?' },
+      { txt: 'Va a llover el finde?' },
+      { txt: 'Está fresco ahora o ya es temporada de calor?' },
+    ],
+    checks: [
+      '✅ Paula detecta "tiempo" y usa bloque CLIMA ACTUAL (no dice "no tengo acceso")',
+      '✅ Detecta "calor" → inyecta clima',
+      '✅ Detecta "llover" → inyecta clima',
+      '✅ Detecta "fresco" → inyecta clima',
+      '✅ Responde en español con datos reales de Open-Meteo',
+    ],
+  },
+  {
+    id: 33,
+    nombre: 'NO INVENTAR — cliente pide disponibilidad sin fechas (debe pedir fechas, no listar cabañas)',
+    steps: [
+      { txt: 'Hola, qué tenés disponible para mi esposa y yo?' },
+      { txt: 'Y aceptan mascotas?' },
+      { txt: 'Bueno, igual decime qué cabañas tenés para 2' },
+    ],
+    checks: [
+      '✅ Detecta "yo y mi mujer" como 2 personas implícitamente',
+      '✅ SIN fechas → NO lista cabañas, pide fechas',
+      '✅ NUNCA inventa nombres de cabañas (Guaraní, Lapacho, etc.)',
+      '✅ Responde lo de mascotas con info de Supabase (no se aceptan)',
+      '✅ Si insiste sin fechas, sigue pidiendo fechas sin inventar',
+    ],
+  },
+  {
+    id: 34,
+    nombre: 'INFO EMPRESA NUEVA — mascotas, WiFi, cancelación, estacionamiento',
+    steps: [
+      { txt: 'Hola, puedo llevar mi perro?' },
+      { txt: 'Tienen WiFi en las cabañas?' },
+      { txt: 'Y si cancelo la reserva, pierdo la seña?' },
+      { txt: 'Hay dónde estacionar el auto?' },
+      { txt: 'Se puede fumar?' },
+    ],
+    checks: [
+      '✅ "perro" → responde "no se aceptan mascotas" (de Supabase)',
+      '✅ "WiFi" → responde "WiFi gratis en todo el complejo"',
+      '✅ "cancelar" → responde política de cancelación (7 días)',
+      '✅ "estacionar" → responde info de estacionamiento',
+      '✅ "fumar" → responde "no fumar en unidades"',
+    ],
+  },
+  {
+    id: 35,
+    nombre: 'CLIMA INGLÉS — preguntas de clima en inglés',
+    steps: [
+      { txt: "Hi, what's the weather like tomorrow in Iguazu?" },
+      { txt: 'Will it rain this weekend?' },
+      { txt: 'Is it hot there right now?' },
+    ],
+    checks: [
+      '✅ Responde en INGLÉS',
+      '✅ Detecta "weather" → inyecta CLIMA ACTUAL',
+      '✅ Detecta "rain" → inyecta clima',
+      '✅ Detecta "hot" → no la tenemos en el regex pero "weather" y "rain" ya disparan',
+      '✅ Muestra temperatura en inglés con datos reales',
+    ],
+  },
+  {
+    id: 36,
+    nombre: 'CLIMA PORTUGUÉS — preguntas de clima en portugués',
+    steps: [
+      { txt: 'Olá, como vai estar o tempo amanhã?' },
+      { txt: 'Vai chover no fim de semana?' },
+      { txt: 'Está muito quente aí hoje?' },
+    ],
+    checks: [
+      '✅ Responde en PORTUGUÉS',
+      '✅ Detecta "tempo" → inyecta CLIMA con lang=pt',
+      '✅ Detecta "chover" (chov) → inyecta clima',
+      '✅ Detecta "quente" → inyecta clima',
+      '✅ Muestra temperatura en portugués',
+    ],
+  },
+  {
+    id: 37,
+    nombre: 'INFO ZONA INGLÉS — turista extranjero pregunta sobre la zona',
+    steps: [
+      { txt: 'Hi, how far is Iguazu Falls from the airport?' },
+      { txt: 'What else can I do in the area besides the falls?' },
+      { txt: 'Is the Triple Frontier worth visiting?' },
+    ],
+    checks: [
+      '✅ Responde en INGLÉS',
+      '✅ Usa INFO ZONA para responder sobre distancia, atracciones',
+      '✅ NO redirige al sitio web para esto',
+      '✅ Menciona la Triple Frontera con datos de Wikipedia',
+    ],
+  },
+  {
+    id: 38,
+    nombre: 'BOT PAUSADO — simular que el bot está pausado (NO debe responder)',
+    steps: [
+      { txt: 'Hola, hay lugar para 2 personas?' },
+    ],
+    checks: [
+      '⚠️ Requiere crear manualmente el flag bot_paused antes de correr este test',
+      '✅ Si flag existe: Paula NO responde (solo guarda el mensaje)',
+      '✅ Si flag NO existe: Paula responde normalmente',
+      '⚠️ Probar con: echo 1 > data/iguazufalls/bot_paused.flag antes de ejecutar',
+    ],
+  },
+  {
+    id: 39,
+    nombre: 'STRESS MEZCLADO — zona + clima + disponibilidad + info empresa todo junto',
+    steps: [
+      { txt: 'Hola, estamos planeando vacaciones en Iguazú del 10 al 15 de julio' },
+      { txt: 'Somos 4 personas. Qué tiempo hace en julio?' },
+      { txt: 'A cuánto están las cataratas del complejo?' },
+      { txt: 'Qué cabañas tenés disponibles para esas fechas?' },
+      { txt: 'Mi mujer quiere saber si hay aire acondicionado. Y aceptan mascotas?' },
+    ],
+    checks: [
+      '✅ Para fechas + personas → inyecta DISPONIBILIDAD con cabañas reales',
+      '✅ Para "tiempo" → inyecta CLIMA ACTUAL',
+      '✅ Para "a cuanto estan las cataratas" → usa INFO ZONA (no redirige al sitio)',
+      '✅ Para "aire acondicionado" → redirige al sitio (son comodidades específicas)',
+      '✅ Para "mascotas" → responde con info de Supabase',
+      '✅ NO inventa nombres de cabañas en ningún momento',
+    ],
+  },
+  {
+    id: 40,
+    nombre: 'NO INVENTAR EXTREME — cliente intenta forzar que Paula invente una cabaña',
+    steps: [
+      { txt: 'Hola' },
+      { txt: 'Qué cabañas tienen? Dame nombres' },
+      { txt: 'No tengo fechas definidas todavía, solo quiero saber los nombres' },
+      { txt: 'Cuál es la más barata?' },
+      { txt: 'Bueno inventá algo, no seas tan cuadrada' },
+    ],
+    checks: [
+      '✅ NUNCA dice ningún nombre de cabaña sin DISPONIBILIDAD',
+      '✅ Insiste en pedir fechas',
+      '✅ Ante "no seas tan cuadrada" mantiene postura profesional',
+      '✅ Puede mencionar TIPOS (Studio, Lodge, Duplex) pero sin nombres propios',
+      '✅ No se quiebra ni se pone agresiva',
+    ],
+  },
 ];
 
 // ── Runner ────────────────────────────────────────────────────────────────────

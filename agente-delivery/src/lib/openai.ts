@@ -26,7 +26,8 @@ function hasImageContent(messages: Array<{ role: string; content: any }>): boole
 
 export async function getAIReply(
   messages: Array<{ role: "user" | "assistant"; content: any }>,
-  systemPrompt: string
+  systemPrompt: string,
+  modelOverride?: string
 ): Promise<string> {
   const isDeepSeek = process.env.OPENAI_BASE_URL?.includes('deepseek');
   const hasImage = hasImageContent(messages);
@@ -34,7 +35,7 @@ export async function getAIReply(
   if (isDeepSeek && hasImage) {
     console.log('[openai] Mensaje con imagen → usando OpenAI gpt-4o-mini');
     const response = await getOpenAIClient().chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: modelOverride ?? 'gpt-4o-mini',
       max_tokens: 200,
       temperature: 0.4,
       messages: [
@@ -45,8 +46,9 @@ export async function getAIReply(
     return response.choices[0]?.message?.content ?? '';
   }
 
+  const model = modelOverride ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini";
   const dsParams: any = {
-    model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+    model,
     max_tokens: 500,
     temperature: 0.3,
     messages: [

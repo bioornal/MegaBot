@@ -16,7 +16,14 @@ const RX_DATE_RANGE = /\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/;
 const RX_MES = /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/i;
 // Match formas: "4 personas", "4 adultos", "para 4", "somos 4", "seremos 4", "5 pax", "4 p"
 const RX_PEOPLE = /\b(\d{1,2})\s*(persona|personas|huésped|huespedes|huéspedes|adulto|adultos|pax|pessoas|guests|adults|p\b)|\b(?:somos|seremos|para|son|sou)\s+(\d{1,2})\b/i;
-const RX_AVAIL = /\b(disponib|reserva|alojamiento|cabaña|cabana|fecha|noches?|del\s+\d+\s+al\s+\d+)/i;
+const RX_AVAIL = /\b(disponib|reserva|alojamiento|cabaña|cabana|fecha|noches?|del\s+\d+\s+al\s+\d+|ten[eé]s|tienen|ten[eé]s\s+(?:lugar|algo|opciones|disponible|cabañas|cabanas|alojamiento|habitacion)|qu[eé]\s+(?:tienen|ten[eé]s|hay)\s+(?:disponible|para|lugar|cabañas))\b/i;
+
+// Patrones que implican 1 persona
+const RX_SOLO_1P = /\b(?:solo|sola)\s+(?:yo|viajo|voy|estoy|vengo)\b|\bvengo\s+(?:solo|sola)\b|\bviajo\s+(?:solo|sola)\b/i;
+// Patrones que implican 2 personas (pareja)
+const RX_PAREJA_2P = /\b(?:yo\s+y\s+mi\s+(?:mujer|esposa|marido|esposo|novia|novio|pareja)|mi\s+(?:mujer|esposa|marido|esposo|novia|novio|pareja)\s+y\s+yo|con\s+mi\s+(?:mujer|esposa|marido|esposo|novia|novio|pareja)|pareja|nosotros\s+dos|los\s+dos|ambos)\b/i;
+// Patrones que mencionan familia (3+ personas)
+const RX_FAMILIA = /\b(?:familia|familiares|pap[áa]s|padres|suegros|abuelos|hijos|hermanos|parientes)\b/i;
 
 export function detectIntent(text: string, hasMediaImage: boolean): IntentResult {
   if (hasMediaImage) {
@@ -24,7 +31,9 @@ export function detectIntent(text: string, hasMediaImage: boolean): IntentResult
   }
   const t = text.toLowerCase();
   const hasDates = RX_DATE_RANGE.test(t) || RX_MES.test(t);
-  const hasPeople = RX_PEOPLE.test(t);
+  const hasPeopleExplicit = RX_PEOPLE.test(t);
+  const hasPeopleImplicit = RX_PAREJA_2P.test(t) || RX_FAMILIA.test(t) || RX_SOLO_1P.test(t);
+  const hasPeople = hasPeopleExplicit || hasPeopleImplicit;
   const hasAvailKeyword = RX_AVAIL.test(t);
   const intent: Intent = (hasDates || hasPeople || hasAvailKeyword) ? 'availability' : 'general';
   return { intent, hasDates, hasPeople };
@@ -34,14 +43,28 @@ export function detectIntent(text: string, hasMediaImage: boolean): IntentResult
  * Extrae cantidad de personas si está mencionada explícitamente.
  */
 export function extractPeople(text: string): number | null {
+  const t = text.toLowerCase();
+
+  // Explícito: "2 personas", "somos 3", "para 4", etc.
   const m = text.match(RX_PEOPLE);
-  if (!m) return null;
-  // El regex tiene 2 grupos alternativos: m[1] del primer pattern, m[3] del segundo
-  const numStr = m[1] ?? m[3];
-  if (!numStr) return null;
-  const n = parseInt(numStr, 10);
-  if (Number.isNaN(n) || n < 1 || n > 50) return null;
-  return n;
+  if (m) {
+    const numStr = m[1] ?? m[3];
+    if (numStr) {
+      const n = parseInt(numStr, 10);
+      if (!Number.isNaN(n) && n >= 1 && n <= 50) return n;
+    }
+  }
+
+  // Implícito: familia
+  if (RX_FAMILIA.test(t)) return 4; // asume 4 como mínimo para familias
+
+  // Implícito: pareja
+  if (RX_PAREJA_2P.test(t)) return 2;
+
+  // Implícito: solo
+  if (RX_SOLO_1P.test(t)) return 1;
+
+  return null;
 }
 
 const MESES: Record<string, number> = {
