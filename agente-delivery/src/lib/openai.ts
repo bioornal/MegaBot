@@ -14,7 +14,7 @@ function getClient(): OpenAI {
 let _openaiClient: OpenAI | null = null;
 function getOpenAIClient(): OpenAI {
   if (!_openaiClient) {
-    const key = process.env.OPENAI_FALLBACK_KEY || process.env.OPENAI_API_KEY;
+    const key = process.env.OPENAI_FALLBACK_KEY || process.env.OPENAI_API_KEY || '';
     console.log('[openai] Cliente OpenAI dedicado inicializado (key termina en:', key.slice(-4), ')');
     _openaiClient = new OpenAI({ apiKey: key });
   }
