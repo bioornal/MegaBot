@@ -15,8 +15,7 @@ let _openaiClient: OpenAI | null = null;
 function getOpenAIClient(): OpenAI {
   if (!_openaiClient) {
     const key = process.env.OPENAI_FALLBACK_KEY || process.env.OPENAI_API_KEY || '';
-    console.log('[openai] Cliente OpenAI dedicado inicializado (key termina en:', key.slice(-4), ')');
-    _openaiClient = new OpenAI({ apiKey: key });
+    _openaiClient = new OpenAI({ apiKey: key, baseURL: 'https://api.openai.com/v1' });
   }
   return _openaiClient;
 }
@@ -78,7 +77,7 @@ export async function transcribeAudioBuffer(
 
   // Crear siempre cliente nuevo apuntando a OpenAI real, nunca cacheado
   const apiKey = (fallbackKey || mainKey).trim();
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, baseURL: 'https://api.openai.com/v1' });
 
   const response = await client.audio.transcriptions.create({
     file: await toFile(audio, fileName),
