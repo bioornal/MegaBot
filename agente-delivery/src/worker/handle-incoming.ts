@@ -107,6 +107,15 @@ async function buildIguazufallsExtras(
   const intent = detectIntent(msg.text ?? '', !!msg.mediaUrl);
   const blocks: string[] = [];
 
+  // Si el turno anterior hubo un error de disponibilidad (fechas pasadas, etc.),
+  // inyectamos la instrucción para Paula en este turno
+  if (state && (state as any).step === 'disp_error' && (state as any).error) {
+    console.log(`[handler] Inyectando error previo de DISPONIBILIDAD: ${(state as any).error.substring(0, 60)}...`);
+    blocks.push((state as any).error);
+    // Limpiar el error para que no se repita
+    db.setReservationState(conversationId, '');
+  }
+
   // === Caso BYPASS sin estado de reserva (modo test) ===
   // Si bypass está ON y llega una imagen, aceptar como OK aunque no haya
   // habido un #reservar previo. Permite testear el flujo de comprobante
@@ -540,7 +549,19 @@ export async function handleIncoming(
           /^\d{4}-\d{2}-\d{2}$/.test(ci) && /^\d{4}-\d{2}-\d{2}$/.test(co)) {
         console.log(`[handler] EXTRAC_DATOS: ${personas}p ${ci}→${co} — consultando disponibilidad...`);
         const dispBlock = await generateDisponibilidad(personas, ci, co);
-        finalReply = finalReply.replace(extractMatch[0], '\n\n' + dispBlock);
+
+        // Si es una instrucción de error (fechas pasadas, sin cabañas, etc.) → PELIGROSO mostrarlo al cliente
+        // Lo reinyectamos como contexto para el PRÓXIMO turno, no en este.
+        if (dispBlock.includes('INSTRUCCIÓN') || dispBlock.includes('ninguna cabaña admite')) {
+          console.log(`[handler] DISPONIBILIDAD bloqueada (error): ${dispBlock.substring(0, 80)}...`);
+          // Guardamos el error en el estado para el próximo turno
+          db.setReservationState(convo.id, serializeState({ step: 'disp_error', error: dispBlock } as any));
+          // Quitamos el marker sin poner nada en la respuesta al cliente
+          finalReply = finalReply.replace(extractMatch[0], '');
+        } else {
+          // Es una lista real de cabañas → inyectar
+          finalReply = finalReply.replace(extractMatch[0], '\n\n' + dispBlock);
+        }
       } else {
         // Datos incompletos → solo quitamos el marker
         console.log(`[handler] EXTRAC_DATOS incompleto (p=${pRaw} ci=${ci} co=${co}) — eliminando marker`);
