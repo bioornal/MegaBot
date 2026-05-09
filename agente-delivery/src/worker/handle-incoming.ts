@@ -669,8 +669,31 @@ export async function handleIncoming(
         finalReply = finalReply.replace(markerMatch[0], confirmText);
       } catch (e: any) {
         console.error(`[handler] ✗ Error creando reserva auto:`, e.message);
-        // Si la creación falló, sacamos el marker y avisamos al cliente
-        finalReply = finalReply.replace(markerMatch[0], `Necesito verificar algunos datos antes de confirmar. Te conecto con un asesor, ¡un momento!`);
+        const errMsg = e.message;
+
+        // Mensaje inteligente para Paula según tipo de error
+        let instruction = '';
+        if (errMsg.includes('fechas deben ser') || errMsg.includes('YYYY-MM-DD') || errMsg.includes('Invalid Date')) {
+          instruction = `INSTRUCCIÓN PARA PAULA: Las fechas "${ci || '?'}" → "${co || '?'}" no son válidas. Necesito fechas EXACTAS en formato YYYY-MM-DD. Pedile al cliente que te diga fechas concretas (ej. "15 de julio de 2026"). NO vuelvas a emitir el marker [CREAR_RESERVA] hasta que el cliente te dé fechas explícitas.`;
+        } else if (errMsg.includes('Marker incompleto')) {
+          instruction = `INSTRUCCIÓN PARA PAULA: Faltan datos. Revisá: cabana=${cabanaName}, ci=${ci}, co=${co}, personas=${personasStr}, nombre=${nombre}, telefono=${telefono}. Pedí al cliente lo que falte. NO vuelvas a emitir [CREAR_RESERVA] hasta tener todos los datos.`;
+        } else if (errMsg.includes('no encontrada')) {
+          instruction = `INSTRUCCIÓN PARA PAULA: La cabaña "${cabanaName}" no existe en el catálogo. Solo podés elegir cabañas que aparecen en el bloque DISPONIBILIDAD. Pedile al cliente que elija otra.`;
+        } else if (errMsg.includes('admite hasta')) {
+          instruction = `INSTRUCCIÓN PARA PAULA: La cabaña ${cabanaName} no admite ${personasStr} personas. Decile al cliente cuál es la capacidad máxima y ofrecé alternativas.`;
+        } else if (errMsg.includes('ocupado')) {
+          instruction = `INSTRUCCIÓN PARA PAULA: La cabaña ${cabanaName} está ocupada en esas fechas. Decile al cliente que no está disponible y ofrecé alternativas del bloque DISPONIBILIDAD.`;
+        } else if (errMsg.includes('pasado')) {
+          instruction = `INSTRUCCIÓN PARA PAULA: Las fechas indicadas ya pasaron. Decile al cliente en su idioma y pedile fechas futuras.`;
+        } else {
+          instruction = `INSTRUCCIÓN PARA PAULA: Error al crear la reserva (${errMsg.substring(0, 80)}). Derivá al cliente con un asesor humano. NO reintentes el marker.`;
+        }
+
+        // Marcar que ya se intentó emitir el marker en esta conversación
+        // para que Paula no lo reintente (guard en buildIguazufallsExtras)
+        db.setReservationState(convo.id, serializeState({ step: 'marker_failed', attempt: Date.now() } as any));
+
+        finalReply = finalReply.replace(markerMatch[0], instruction);
       }
       } // cierre del else (no había event_id previo)
     }
