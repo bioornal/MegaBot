@@ -59,7 +59,12 @@ export async function transcribeAudioBuffer(
   audio: Buffer,
   fileName = "audio.ogg"
 ): Promise<string> {
-  const response = await getClient().audio.transcriptions.create({
+  // DeepSeek NO soporta /v1/audio/transcriptions → usar siempre OpenAI
+  const client = process.env.OPENAI_BASE_URL?.includes('deepseek')
+    ? new OpenAI({ apiKey: process.env.OPENAI_FALLBACK_KEY || process.env.OPENAI_API_KEY })
+    : getClient();
+
+  const response = await client.audio.transcriptions.create({
     file: await toFile(audio, fileName),
     model: process.env.OPENAI_TRANSCRIPTION_MODEL ?? "whisper-1",
   });
