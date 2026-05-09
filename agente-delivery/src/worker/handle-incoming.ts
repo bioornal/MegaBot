@@ -123,6 +123,18 @@ async function buildIguazufallsExtras(
     db.setReservationState(conversationId, '');
   }
 
+  // Si la reserva ya está completada (comprobante verificado, evento CONFIRMADO),
+  // recordarle a Paula que está todo listo para que responda con seguridad
+  if (state && (state as any).step === 'completed') {
+    console.log(`[handler] Reserva ya completada — inyectando CONFIRMADO`);
+    blocks.push(
+      'RESERVA CONFIRMADA: El comprobante ya fue verificado y la reserva está CONFIRMADA en el calendario. ' +
+      'Si el cliente pregunta si está confirmado, respondé que SÍ, está todo listo. ' +
+      'NO digas "en breve", "el equipo va a confirmar" ni frases similares — YA ESTÁ CONFIRMADO.'
+    );
+    db.setReservationState(conversationId, '');
+  }
+
   // === Caso BYPASS sin estado de reserva (modo test) ===
   // Si bypass está ON y llega una imagen, aceptar como OK aunque no haya
   // habido un #reservar previo. Permite testear el flujo de comprobante
@@ -132,10 +144,9 @@ async function buildIguazufallsExtras(
     blocks.push(
       'COMPROBANTE: OK\n' +
       'Detalle: bypass activo — verificación omitida (modo test).\n' +
-      'INSTRUCCIÓN OBLIGATORIA: el comprobante ESTÁ VERIFICADO y APROBADO. ' +
-      'IGNORÁ cualquier rechazo previo tuyo en el historial sobre este comprobante. ' +
-      'Respondé EXACTAMENTE: "Comprobante recibido y verificado. El equipo confirma tu reserva en breve. ¡Gracias!" ' +
-      'No menciones monto, cuenta ni nada del comprobante.'
+      'LA RESERVA YA ESTÁ CONFIRMADA. ' +
+      'Respondé EXACTAMENTE: "Comprobante recibido y verificado. ¡Reserva confirmada! Cualquier consulta estamos a disposición." ' +
+      'NO digas "en breve" ni "el equipo confirma" — ya está confirmado.'
     );
     return blocks.join('\n\n');
   }
@@ -191,7 +202,7 @@ async function buildIguazufallsExtras(
       }
     }
 
-    blocks.push(`COMPROBANTE: ${tag}\nDetalle: ${detail}`);
+    blocks.push(`COMPROBANTE: ${tag}\nDetalle: ${detail}\nLA RESERVA YA ESTÁ CONFIRMADA. El evento en el calendario pasó de PENDIENTE a CONFIRMADO. Decile al cliente EXACTAMENTE: "Comprobante recibido y verificado. ¡Reserva confirmada! Cualquier consulta estamos a disposición." NO digas "en breve" ni "el equipo va a confirmar" — ya está confirmado.`);
     return blocks.join('\n\n');
   }
 
