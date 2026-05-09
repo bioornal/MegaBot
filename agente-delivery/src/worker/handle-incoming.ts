@@ -550,9 +550,9 @@ export async function handleIncoming(
         console.log(`[handler] EXTRAC_DATOS: ${personas}p ${ci}→${co} — consultando disponibilidad...`);
         const dispBlock = await generateDisponibilidad(personas, ci, co);
 
-        // Si es una instrucción de error (fechas pasadas, sin cabañas, etc.) → PELIGROSO mostrarlo al cliente
-        // Lo reinyectamos como contexto para el PRÓXIMO turno, no en este.
-        if (dispBlock.includes('INSTRUCCIÓN') || dispBlock.includes('ninguna cabaña admite')) {
+        // Si es un error real (fechas pasadas, sin cabañas) → NO mostrar al cliente
+        // "INSTRUCCIÓN" aparece también en el bloque normal, así que chequeamos frases de error
+        if (dispBlock.includes('ya pasaron') || dispBlock.includes('ninguna cabaña admite')) {
           console.log(`[handler] DISPONIBILIDAD bloqueada (error): ${dispBlock.substring(0, 80)}...`);
           // Guardamos el error en el estado para el próximo turno
           db.setReservationState(convo.id, serializeState({ step: 'disp_error', error: dispBlock } as any));
