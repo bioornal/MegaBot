@@ -66,9 +66,17 @@ export async function transcribeAudioBuffer(
   audio: Buffer,
   fileName = "audio.ogg"
 ): Promise<string> {
-  // Audio SIEMPRE con OpenAI (whisper-1), nunca DeepSeek
   const isDeepSeek = process.env.OPENAI_BASE_URL?.includes('deepseek');
-  const client = isDeepSeek ? getOpenAIClient() : getClient();
+  const fallbackKey = process.env.OPENAI_FALLBACK_KEY || '';
+  const mainKey = process.env.OPENAI_API_KEY || '';
+
+  console.log('[openai:audio] isDeepSeek:', isDeepSeek,
+    '| fallbackKey:', fallbackKey.slice(0, 15) + '...' + fallbackKey.slice(-4),
+    '| mainKey:', mainKey.slice(0, 15) + '...' + mainKey.slice(-4));
+
+  // Crear siempre cliente nuevo apuntando a OpenAI real, nunca cacheado
+  const apiKey = (fallbackKey || mainKey).trim();
+  const client = new OpenAI({ apiKey });
 
   const response = await client.audio.transcriptions.create({
     file: await toFile(audio, fileName),
