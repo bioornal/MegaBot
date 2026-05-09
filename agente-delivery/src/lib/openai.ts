@@ -10,6 +10,17 @@ function getClient(): OpenAI {
   return _client;
 }
 
+// Cliente dedicado a OpenAI real (nunca DeepSeek) para audio e imágenes
+let _openaiClient: OpenAI | null = null;
+function getOpenAIClient(): OpenAI {
+  if (!_openaiClient) {
+    const key = process.env.OPENAI_FALLBACK_KEY || process.env.OPENAI_API_KEY;
+    console.log('[openai] Cliente OpenAI dedicado inicializado (key termina en:', key.slice(-4), ')');
+    _openaiClient = new OpenAI({ apiKey: key });
+  }
+  return _openaiClient;
+}
+
 function hasImageContent(messages: Array<{ role: string; content: any }>): boolean {
   return messages.some((m) => typeof m.content !== 'string' && Array.isArray(m.content));
 }
@@ -18,14 +29,12 @@ export async function getAIReply(
   messages: Array<{ role: "user" | "assistant"; content: any }>,
   systemPrompt: string
 ): Promise<string> {
-  // DeepSeek NO soporta imágenes → usar OpenAI para mensajes con imagen
   const isDeepSeek = process.env.OPENAI_BASE_URL?.includes('deepseek');
   const hasImage = hasImageContent(messages);
 
   if (isDeepSeek && hasImage) {
-    console.log('[openai] Mensaje con imagen → usando OpenAI para procesar');
-    const openaiImageClient = new OpenAI({ apiKey: process.env.OPENAI_FALLBACK_KEY });
-    const response = await openaiImageClient.chat.completions.create({
+    console.log('[openai] Mensaje con imagen → usando OpenAI gpt-4o-mini');
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4o-mini',
       max_tokens: 200,
       temperature: 0.4,
@@ -37,8 +46,6 @@ export async function getAIReply(
     return response.choices[0]?.message?.content ?? '';
   }
 
-  // DeepSeek o OpenAI para texto
-  // DeepSeek V4 usa thinking mode por defecto → lo desactivamos
   const dsParams: any = {
     model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
     max_tokens: 500,
@@ -59,14 +66,13 @@ export async function transcribeAudioBuffer(
   audio: Buffer,
   fileName = "audio.ogg"
 ): Promise<string> {
-  // DeepSeek NO soporta /v1/audio/transcriptions → usar siempre OpenAI
-  const client = process.env.OPENAI_BASE_URL?.includes('deepseek')
-    ? new OpenAI({ apiKey: process.env.OPENAI_FALLBACK_KEY || process.env.OPENAI_API_KEY })
-    : getClient();
+  // Audio SIEMPRE con OpenAI (whisper-1), nunca DeepSeek
+  const isDeepSeek = process.env.OPENAI_BASE_URL?.includes('deepseek');
+  const client = isDeepSeek ? getOpenAIClient() : getClient();
 
   const response = await client.audio.transcriptions.create({
     file: await toFile(audio, fileName),
-    model: process.env.OPENAI_TRANSCRIPTION_MODEL ?? "whisper-1",
+    model: "whisper-1",
   });
 
   const text =
