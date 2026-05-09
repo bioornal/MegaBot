@@ -7,10 +7,10 @@ import { getCatalogContext } from '../lib/catalog';
 import { getCompanyInfoContext } from '../lib/company-info';
 import { getMenuContextFromInsforge, getCompanyInfoFromInsforge, savePedidoToInsforge, getPricesMap } from '../lib/insforge-client';
 import { randomDelayMs, sleep, humanDelayMs } from '../lib/delay';
-import { getCart, clearCart, calculateTotal, addToCart, removeFromCart, updateItemQty, parseCartFromLLMReply, canonicalName, setOrderType, generateTotalReply, syncPrices, arePricesLoaded, type Cart } from '../lib/cart';
+import { getCart, clearCart, calculateTotal, addToCart, removeFromCart, updateItemQty, parseCartFromLLMReply, applyUserCartCorrections, canonicalName, setOrderType, generateTotalReply, syncPrices, arePricesLoaded, type Cart } from '../lib/cart';
 import type { WhatsAppProvider, IncomingMessage } from '../providers/types';
 import { getTenantById } from '../tenants.config';
-import { detectIntent, extractPeople } from '../lib/intent-iguazufalls';
+import { detectIntent, extractPeople, extractDateRange } from '../lib/intent-iguazufalls';
 import { findCabanasByCapacity, fetchCabanas, getCabanaByName } from '../lib/catalog';
 import { checkAvailability, createReservationEvent, updateReservationEvent } from '../lib/calendar-gcal';
 import { getSeason } from '../lib/season';
@@ -82,6 +82,23 @@ async function buildIguazufallsExtras(
   const intent = detectIntent(msg.text ?? '', !!msg.mediaUrl);
   const blocks: string[] = [];
 
+  // === Caso BYPASS sin estado de reserva (modo test) ===
+  // Si bypass está ON y llega una imagen, aceptar como OK aunque no haya
+  // habido un #reservar previo. Permite testear el flujo de comprobante
+  // sin tener que armar toda la reserva primero.
+  if (isBypassActive() && intent.intent === 'receipt' && msg.mediaUrl && state?.step !== 'awaiting_receipt') {
+    console.log('[handler] Bypass activo + sin awaiting_receipt → comprobante aceptado (test)');
+    blocks.push(
+      'COMPROBANTE: OK\n' +
+      'Detalle: bypass activo — verificación omitida (modo test).\n' +
+      'INSTRUCCIÓN OBLIGATORIA: el comprobante ESTÁ VERIFICADO y APROBADO. ' +
+      'IGNORÁ cualquier rechazo previo tuyo en el historial sobre este comprobante. ' +
+      'Respondé EXACTAMENTE: "Comprobante recibido y verificado. El equipo confirma tu reserva en breve. ¡Gracias!" ' +
+      'No menciones monto, cuenta ni nada del comprobante.'
+    );
+    return blocks.join('\n\n');
+  }
+
   // === Caso COMPROBANTE ===
   if (intent.intent === 'receipt' && state?.step === 'awaiting_receipt' && msg.mediaUrl && state.sena) {
     let receiptOk = false;
@@ -141,21 +158,59 @@ async function buildIguazufallsExtras(
   if (intent.intent === 'availability' && intent.hasPeople) {
     const personas = extractPeople(msg.text) ?? state?.personas;
     if (personas) {
+      // Extraer fechas: prioridad state > mensaje actual > historial reciente
+      let checkIn = state?.check_in;
+      let checkOut = state?.check_out;
+      if (!checkIn || !checkOut) {
+        const here = extractDateRange(msg.text || '');
+        if (here) { checkIn = here.ci; checkOut = here.co; }
+      }
+      if (!checkIn || !checkOut) {
+        // Buscar en últimos 6 mensajes user del historial
+        try {
+          const recent = db.getRecentHistory(conversationId, 6);
+          for (let i = recent.length - 1; i >= 0; i--) {
+            if (recent[i].role !== 'user') continue;
+            const dr = extractDateRange(recent[i].content || '');
+            if (dr) { checkIn = dr.ci; checkOut = dr.co; break; }
+          }
+        } catch {}
+      }
+
+      // Validar fechas pasadas
+      if (checkIn && checkOut) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const ciDate = new Date(checkIn + 'T12:00:00-03:00');
+        if (ciDate < today) {
+          blocks.push(
+            `DISPONIBILIDAD — INSTRUCCIÓN: las fechas que pidió el cliente (${checkIn} → ${checkOut}) ya pasaron (hoy es ${today.toISOString().slice(0, 10)}). Decile en su idioma que no podemos reservar fechas pasadas y pedile que indique fechas futuras. NO listes cabañas ni precios. NO emitas el marker [CREAR_RESERVA].`
+          );
+          return blocks.join('\n\n');
+        }
+      }
+
       const candidatas = await findCabanasByCapacity(personas, _tenant.productsTable);
       if (candidatas.length > 0) {
-        const checkIn = state?.check_in;
-        const lines = [`DISPONIBILIDAD — opciones para ${personas} personas:`];
+        const lines = [
+          `DISPONIBILIDAD — INSTRUCCIÓN: copiá la siguiente lista TAL CUAL en tu respuesta al cliente, en su idioma. NO digas "voy a verificar" ni "un momento" — la información ya está acá. Si una cabaña tiene "❌ ocupado" NO la ofrezcas como opción reservable; ofrecé solo las que tienen "✅".`,
+          ``,
+          checkIn && checkOut
+            ? `Opciones para ${personas} personas (${checkIn} → ${checkOut}):`
+            : `Opciones para ${personas} personas:`,
+        ];
         for (const c of candidatas) {
           let precio = '';
           let libre = '';
-          if (checkIn && state?.check_out) {
+          if (checkIn && checkOut) {
             const season = getSeason(new Date(checkIn + 'T12:00:00-03:00'));
             const p = season === 'alta' ? c.precio_alta : season === 'media' ? c.precio_media : c.precio_baja;
             precio = ` — $${p.toLocaleString('es-AR')}/noche (${season})`;
             try {
-              const free = await checkAvailability(c.calendar_id, checkIn, state.check_out);
+              const free = await checkAvailability(c.calendar_id, checkIn, checkOut);
               libre = free ? ' ✅' : ' ❌ ocupado';
-            } catch {
+            } catch (e: any) {
+              console.error(`[handler] checkAvailability error para ${c.nombre}: ${e.message}`);
               libre = '';
             }
           }
@@ -393,6 +448,17 @@ export async function handleIncoming(
     console.log(`[handler] iguazufalls extras length: ${extras.length}`);
   }
 
+  // Si el sistema ya verificó el comprobante (bloque COMPROBANTE: presente),
+  // no pasamos la imagen al LLM — la decisión ya está tomada en texto.
+  // Esto también evita que un URL de imagen roto/expirado crashee el handler.
+  if (extras.includes('COMPROBANTE:')) {
+    for (const m of llmMessages) {
+      if (typeof m.content !== 'string' && Array.isArray(m.content)) {
+        m.content = '[comprobante recibido]';
+      }
+    }
+  }
+
   const fullSystemPrompt = [SYSTEM_PROMPT, companyInfoContext, catalogContext, extras]
     .filter(Boolean)
     .join('\n\n') + cartContext;
@@ -409,6 +475,7 @@ export async function handleIncoming(
   // === Lógica de carrito: SOLO para Impasto (dataSource: insforge) ===
   if (_tenant.dataSource === 'insforge') {
     // Actualizar carrito basado en lo que el LLM confirmó
+    applyUserCartCorrections(msg.from, msg.text);
     parseCartFromLLMReply(msg.from, reply);
 
     // Detectar delivery/retiro ANTES de cualquier corrección de total
@@ -421,10 +488,15 @@ export async function handleIncoming(
                        (lowerMsg.match(/^(?:es por|a|mandame|env[ií]o)\s+a\s+\w/) !== null);
     const isRetiro = !isDelivery && (lowerMsg.includes('retiro') || lowerMsg.includes('en local'));
 
-    if (isDelivery) {
+    const normalizedMsg = lowerMsg.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const mentionsDeliveryAsComplaint =
+      /\b(?:bonific|bonifiquen|descuent|gratis|reclam|quej)/i.test(normalizedMsg) &&
+      normalizedMsg.includes('delivery');
+
+    if (isDelivery && !mentionsDeliveryAsComplaint) {
       setOrderType(msg.from, 'delivery');
       console.log(`[handler] Delivery detectado → fee $5000 agregado`);
-    } else if (isRetiro) {
+    } else if (isRetiro || normalizedMsg.includes('retirar') || normalizedMsg.includes('paso a retirar')) {
       setOrderType(msg.from, 'retiro');
       console.log(`[handler] Retiro detectado → fee $0`);
     }
@@ -438,6 +510,89 @@ export async function handleIncoming(
         console.log(`[handler] Cart total $${cartTotal} vs LLM total ${totalMatch[1]} → replacing`);
         finalReply = finalReply.replace(/total[:\s]*\$?([0-9.,]+)/gi, 'Total: $$' + cartTotal.toLocaleString('es-AR'));
       }
+    }
+  }
+
+  // === IguazuFalls: marker [CREAR_RESERVA: ...] del LLM ===
+  // Cuando Paula tiene todos los datos y el cliente confirma, emite este marker.
+  // El handler lo parsea, crea el evento PENDIENTE en Calendar y deja la conversación
+  // en estado awaiting_receipt. El marker se borra de la respuesta antes de enviarla.
+  if (IS_IGUAZU) {
+    const markerMatch = finalReply.match(/\[CREAR_RESERVA:\s*([^\]]+)\]/);
+    if (markerMatch) {
+      // Si ya hay un evento creado para esta conversación, ignorar el marker —
+      // probablemente el LLM lo re-emitió en un turno posterior por confusión.
+      const existingState = parseState(db.getReservationState(convo.id));
+      if (existingState?.event_id) {
+        console.log(`[handler] Marker ignorado: ya existe evento ${existingState.event_id} (step=${existingState.step})`);
+        finalReply = finalReply.replace(markerMatch[0], '').trim();
+        // continúa con resto del handler
+      } else {
+      const params = markerMatch[1];
+      const get = (key: string) => {
+        const re = new RegExp(`${key}\\s*=\\s*"([^"]+)"|${key}\\s*=\\s*([^\\s]+)`, 'i');
+        const m = params.match(re);
+        return m ? (m[1] ?? m[2]).trim() : null;
+      };
+      const cabanaName = get('cabana');
+      const ci = get('ci') || get('checkin');
+      const co = get('co') || get('checkout');
+      const personasStr = get('personas');
+      const nombre = get('nombre');
+      const telefono = get('telefono') || msg.from.split('@')[0];
+
+      try {
+        if (!cabanaName || !ci || !co || !personasStr || !nombre) {
+          throw new Error(`Marker incompleto: cabana=${cabanaName} ci=${ci} co=${co} personas=${personasStr} nombre=${nombre}`);
+        }
+        const personas = parseInt(personasStr, 10);
+        if (!Number.isFinite(personas) || personas < 1) throw new Error(`personas inválido: ${personasStr}`);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ci) || !/^\d{4}-\d{2}-\d{2}$/.test(co)) {
+          throw new Error(`fechas deben ser YYYY-MM-DD: ci=${ci} co=${co}`);
+        }
+        // Rechazar fechas pasadas
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (new Date(ci + 'T12:00:00-03:00') < today) {
+          throw new Error(`fecha de check-in en el pasado: ${ci}`);
+        }
+
+        const cabanas = await fetchCabanas(_tenant.productsTable);
+        const cabana = getCabanaByName(cabanas, cabanaName);
+        if (!cabana) throw new Error(`Cabaña no encontrada: ${cabanaName}`);
+        if (personas > cabana.capacidad_max) throw new Error(`${cabana.nombre} admite hasta ${cabana.capacidad_max} personas`);
+
+        const free = await checkAvailability(cabana.calendar_id, ci, co);
+        if (!free) throw new Error(`${cabana.nombre} ocupado entre ${ci} y ${co}`);
+
+        const season = getSeason(new Date(ci + 'T12:00:00-03:00'));
+        const precioNoche = season === 'alta' ? cabana.precio_alta : season === 'media' ? cabana.precio_media : cabana.precio_baja;
+        const noches = Math.round((new Date(co + 'T12:00:00-03:00').getTime() - new Date(ci + 'T12:00:00-03:00').getTime()) / (24 * 60 * 60 * 1000));
+        if (noches < 1) throw new Error(`Rango inválido: ${ci} → ${co}`);
+        const total = precioNoche * noches;
+        const sena = Math.round(total * 0.5);
+
+        const r = await confirmReservationFromState(convo.id, {
+          cabana: cabana.nombre,
+          check_in: ci,
+          check_out: co,
+          personas,
+          huesped_nombre: nombre,
+          huesped_telefono: telefono,
+          total,
+          sena,
+        });
+        console.log(`[handler] ✅ Reserva auto-creada: ${cabana.nombre} ${ci}→${co} ${personas}p — eventId=${r.event_id}`);
+
+        // Reemplazar el marker con confirmación natural en la respuesta
+        const confirmText = `Reserva pre-cargada en el calendario. Total: $${total.toLocaleString('es-AR')} | Seña 50%: $${sena.toLocaleString('es-AR')}. Esperamos el comprobante para confirmar.`;
+        finalReply = finalReply.replace(markerMatch[0], confirmText);
+      } catch (e: any) {
+        console.error(`[handler] ✗ Error creando reserva auto:`, e.message);
+        // Si la creación falló, sacamos el marker y avisamos al cliente
+        finalReply = finalReply.replace(markerMatch[0], `Necesito verificar algunos datos antes de confirmar. Te conecto con un asesor, ¡un momento!`);
+      }
+      } // cierre del else (no había event_id previo)
     }
   }
 

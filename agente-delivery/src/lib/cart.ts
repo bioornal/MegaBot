@@ -232,6 +232,68 @@ export function updateItemsByKeyword(phone: string, keyword: string, newQty: num
   if (matches.length > 0) console.log(`[cart] UPDATE all containing "${keyword}" qty → ${newQty} → cart now: ${getCartSummary(phone)}`);
 }
 
+function normalizeCartText(value: string): string {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function cartItemMatchesText(itemName: string, text: string): boolean {
+  const itemLower = normalizeCartText(itemName);
+  const textLower = normalizeCartText(text);
+  const itemWords = itemLower.split(/\s+/);
+  const itemFirst = itemWords[0] ?? '';
+  const itemLast = itemWords[itemWords.length - 1] ?? '';
+  return itemLower.includes(textLower) ||
+         textLower.includes(itemLower) ||
+         (!!itemFirst && textLower.includes(itemFirst)) ||
+         (!!itemLast && textLower.includes(itemLast));
+}
+
+function removeCartItemsByText(phone: string, text: string, qty?: number): void {
+  const cart = getCart(phone);
+  const item = cart.items.find(i => cartItemMatchesText(i.name, text));
+  if (item) {
+    removeFromCart(phone, item.name, qty);
+    console.log(`[cart] USER REMOVE "${text}" -> cart now: ${getCartSummary(phone)}`);
+  }
+}
+
+function updateCartItemQtyByText(phone: string, text: string, qty: number): void {
+  const cart = getCart(phone);
+  for (const item of cart.items) {
+    if (cartItemMatchesText(item.name, text)) {
+      item.qty = qty;
+      console.log(`[cart] USER UPDATE "${text}" -> ${qty} -> cart now: ${getCartSummary(phone)}`);
+    }
+  }
+}
+
+export function applyUserCartCorrections(phone: string, message: string): void {
+  const lower = normalizeCartText(message);
+
+  if (/\b(?:saca|sacame|quita|quitame|borra|borrame|elimina|eliminame)\s+todo\b/.test(lower) ||
+      lower.includes('empecemos de nuevo')) {
+    clearCart(phone);
+    console.log(`[cart] USER CLEAR cart por reset explicito -> ${phone}`);
+    return;
+  }
+
+  const removeMatch = lower.match(/\b(?:saca|sacame|sacalo|sacalos|quita|quitame|borra|borrame|elimina|eliminame)\b/);
+  if (removeMatch) {
+    const start = removeMatch.index ?? 0;
+    const beforeAction = lower.substring(0, start);
+    const afterAction = lower.substring(start + removeMatch[0].length);
+    const removeSegment = afterAction.split(/\s+y\s+cambia|\s+cambia|\s+y\s+agrega|\s+agrega|\s+y\s+pone|\s+pone|\s+poneme|\s+sumo|\s+tambien|[.!?]/i)[0];
+    const targetText = removeSegment.trim().length > 2 ? removeSegment : beforeAction;
+    const qtyMatch = targetText.match(/\b(\d+)\b/);
+    removeCartItemsByText(phone, targetText, qtyMatch ? parseInt(qtyMatch[1], 10) : undefined);
+  }
+
+  const changeMatch = lower.match(/\bcambia(?:me)?\s+(?:las?|los?)?\s*(?:de\s+)?([a-z0-9\s]+?)\s+a\s+(\d+)\b/);
+  if (changeMatch) {
+    updateCartItemQtyByText(phone, changeMatch[1], parseInt(changeMatch[2], 10));
+  }
+}
+
 export function calculateTotal(phone: string): number {
   const cart = getCart(phone);
   const itemsTotal = cart.items.reduce((sum, i) => sum + i.qty * i.unitPrice, 0);
@@ -315,9 +377,16 @@ export function generateReceiptReply(phone: string, name: string, paymentMethod:
 export function parseCartFromLLMReply(phone: string, reply: string): void {
   const text = reply.toLowerCase();
 
+  // "borro todo" / "saco todo" / "empecemos de nuevo" => reset explícito del pedido.
+  if (/\b(?:borro|saco|quito|elimino)\s+todo\b/i.test(reply)) {
+    clearCart(phone);
+    console.log(`[cart] CLEAR cart por reset explícito → ${phone}`);
+    return;
+  }
+
   // "agrego 1 Pizza Fugazzeta" / "agrego una fugazzeta" / "agrego 6 Carne, 4 Pollo y 4 Roquefort"
   // "sumo 1 Pizza Fugazzeta" / "añado una fugazzeta"
-  const addMatch = reply.match(/(?:agrego|sumo|añado)\s+(.+?)(?:\?|$)/i);
+  const addMatch = reply.match(/(?:agrego|sumo|añado)\s+(.+?)(?:\bqueda(?:n)?\b|\.?\s*(?:quer[eé]s|algo m[aá]s|falta algo|va algo|necesit[aá]s)|\?|$)/i);
   if (addMatch) {
     const addText = addMatch[1];
     const itemParts = addText.split(/,\s*|\s+y\s+/);
@@ -334,7 +403,7 @@ export function parseCartFromLLMReply(phone: string, reply: string): void {
       const qty = qtyMatch ? parseInt(qtyMatch[1]) : 1;
       const rawName = (qtyMatch ? qtyMatch[2].trim() : part.replace(/^\d+\s+/, '').split(/[.,;?!]/)[0].trim())
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      if (rawName.length < 2) continue;
+      if (rawName.length < 2 || /^\$?\d/.test(rawName) || rawName.toLowerCase().includes('delivery')) continue;
 
       let cName = canonicalName(rawName);
       // If empanada context and ambiguous result, resolve to empanada variant
@@ -374,7 +443,7 @@ export function parseCartFromLLMReply(phone: string, reply: string): void {
   const removeStart = removeMatch?.index ?? -1;
   if (removeStart !== -1) {
     // Buscar "queda" como palabra completa (no "quedan")
-    const quedaMatch = reply.match(/\bqueda\b/i);
+    const quedaMatch = reply.match(/\bqueda(?:n)?\b/i);
     const quedaIdx = quedaMatch ? quedaMatch.index! : -1;
     const removeText = quedaIdx !== -1
       ? reply.substring(removeStart, quedaIdx)
@@ -393,30 +462,34 @@ export function parseCartFromLLMReply(phone: string, reply: string): void {
       const cart = getCart(phone);
 
       // 1. Canonical exact match
-      const cName = canonicalName(part);
+      const qtyMatch = part.match(/^(\d+)\s+/);
+      const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : undefined;
+      const itemText = qtyMatch ? part.replace(/^(\d+)\s+/, '') : part;
+
+      const cName = canonicalName(itemText);
       const exact = cart.items.find(i => i.name === cName);
-      if (exact) { removeFromCart(phone, cName); continue; }
+      if (exact) { removeFromCart(phone, cName, qty); continue; }
 
 // 2. Partial match on cart items (check various matching strategies)
       const partial = cart.items.find(i => {
         const itemLower = i.name.toLowerCase();
-        const partLower = part.toLowerCase();
+        const partLower = itemText.toLowerCase();
         const itemWord = itemLower.split(' ').pop() ?? '';
         return itemLower.includes(partLower) ||
                partLower.includes(itemWord) ||
                partLower.includes(itemLower) ||
                i.name === canonicalName(part); // exact canonical match against item in cart
       });
-      if (partial) { removeFromCart(phone, partial.name); continue; }
+      if (partial) { removeFromCart(phone, partial.name, qty); continue; }
 
       // 3. Match on DEFAULT_PRICES keys
       const found = Object.keys(DEFAULT_PRICES).find(k => {
         const keyLower = k.toLowerCase();
-        const partLower = part.toLowerCase();
-        const keyWord = keyLower.split(' ').pop() ?? '';
-        return keyLower.includes(partLower) || partLower.includes(keyWord) || partLower.includes(keyLower);
+          const partLower = itemText.toLowerCase();
+          const keyWord = keyLower.split(' ').pop() ?? '';
+          return keyLower.includes(partLower) || partLower.includes(keyWord) || partLower.includes(keyLower);
       });
-      if (found) { removeItemsContaining(phone, part); }
+      if (found) { removeFromCart(phone, found, qty); }
     }
   }
 
@@ -435,10 +508,10 @@ export function parseCartFromLLMReply(phone: string, reply: string): void {
 
   // "queda 8 Carne y 4 Pollo" → parse the qty+name pairs AFTER "queda"
   // This is independent of the remove section above
-  const quedaMatch2 = reply.match(/\bqueda\b/i);
+  const quedaMatch2 = reply.match(/\bqueda(?:n)?\b/i);
   const quedaIdx2 = quedaMatch2?.index ?? -1;
   if (quedaIdx2 !== -1) {
-    const afterQueda = reply.substring(quedaIdx2 + 5); // skip "queda"
+    const afterQueda = reply.substring(quedaIdx2 + quedaMatch2![0].length);
     // Extract "8 Carne y 4 Pollo" — stop at first period or end
     const quedaTextMatch = afterQueda.match(/^(.+?)(?:\.|$)/i);
     if (quedaTextMatch) {
@@ -455,7 +528,11 @@ export function parseCartFromLLMReply(phone: string, reply: string): void {
           updateItemQty(phone, cName, qty);
         } else {
           // Try partial match for ambiguous cases like "Carne" → Empanada Carne
-          const matched = Object.keys(DEFAULT_PRICES).find(k => k.toLowerCase().includes(rawName) || rawName.includes(k.toLowerCase().split(' ').pop() ?? ''));
+          const rawLower = rawName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          const matched = Object.keys(DEFAULT_PRICES).find(k => {
+            const keyLower = k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            return keyLower.includes(rawLower) || rawLower.includes(keyLower.split(' ').pop() ?? '');
+          });
           if (matched) updateItemQty(phone, matched, qty);
         }
       }

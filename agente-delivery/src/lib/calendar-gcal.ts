@@ -94,6 +94,16 @@ export async function updateReservationEvent(
 }
 
 /**
+ * Borra un evento del calendario. SOLO uso administrativo/test —
+ * el bot NUNCA debe llamar esto durante una conversación con cliente.
+ * Cancelaciones reales las maneja el operador humano.
+ */
+export async function deleteReservationEvent(calendarId: string, eventId: string): Promise<void> {
+  const cal = getClient();
+  await cal.events.delete({ calendarId, eventId });
+}
+
+/**
  * Crea un evento PENDIENTE en el calendario de la cabaña.
  * Devuelve el eventId.
  */

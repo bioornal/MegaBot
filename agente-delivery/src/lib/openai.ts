@@ -41,7 +41,7 @@ export async function getAIReply(
   // DeepSeek V4 usa thinking mode por defecto → lo desactivamos
   const dsParams: any = {
     model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-    max_tokens: 300,
+    max_tokens: 500,
     temperature: 0.3,
     messages: [
       { role: "system" as const, content: systemPrompt },

@@ -4,6 +4,7 @@ import type { ConversationWithPreview, Message } from "@/types";
 import ConversationList from "./ConversationList";
 import ConversationPanel from "./ConversationPanel";
 import StatusWidget from "./StatusWidget";
+import BypassToggle from "./BypassToggle";
 import { logout } from '@/app/login/actions'
 
 const POLL_INTERVAL_MS = 10_000;
@@ -242,6 +243,7 @@ export default function Dashboard({ tenantName, botName, tenantId }: DashboardPr
               borderBottom: "1px solid #1c2836",
             }}
           >
+            {tenantId === "iguazufalls" && <BypassToggle />}
             <StatusWidget />
           </div>
 

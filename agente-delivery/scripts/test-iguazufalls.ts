@@ -1,0 +1,682 @@
+#!/usr/bin/env tsx
+// scripts/test-iguazufalls.ts — Test de simulaciones de IguazuFalls Paula
+//
+// Uso:
+//   cd agente-delivery
+//   npx tsx --env-file=.env.iguazufalls scripts/test-iguazufalls.ts
+//   npx tsx --env-file=.env.iguazufalls scripts/test-iguazufalls.ts 1 4 9   (sims específicas)
+//
+// Pre-requisitos:
+//   - Bypass ON activado desde el dashboard (botón Bypass ON/OFF).
+//   - .env.iguazufalls con OPENAI_API_KEY, SUPABASE_*, BANK_*.
+//   - Worker NO debe estar corriendo (este script importa el handler directamente).
+//
+// El script:
+//   - Mockea el provider Baileys (no toca WhatsApp real).
+//   - Llama al LLM real (cuesta tokens).
+//   - Hace queries reales a Supabase (products_iguazufalls, info_empresa_iguazufalls).
+//   - Calendar/OCR se evitan: bypass acepta cualquier "imagen"; sims de #reservar se skipean.
+
+// IMPORTANTE: setear env ANTES de cualquier import del proyecto
+process.env.TENANT_ID = process.env.TENANT_ID || 'iguazufalls';
+process.env.WORKER_PORT = process.env.WORKER_PORT || '3099';
+process.env.DATA_DIR = process.env.DATA_DIR || './data/iguazufalls';
+process.env.AI_REPLY_DELAY = 'false';
+process.env.WHATSAPP_PROVIDER = 'baileys';
+
+import { handleIncoming } from '../src/worker/handle-incoming';
+import type { IncomingMessage } from '../src/providers/types';
+import { getDb } from '../src/lib/db';
+import { deleteReservationEvent } from '../src/lib/calendar-gcal';
+
+const db = getDb(process.env.DATA_DIR!);
+
+// ── Provider mock ─────────────────────────────────────────────────────────────
+let capturedReplies: string[] = [];
+
+const mockProvider = {
+  sendMessage: async (_to: string, text: string) => {
+    capturedReplies.push(text);
+  },
+  markAsRead: async () => {},
+  sendTyping: async () => {},
+  stopTyping: async () => {},
+  start: async () => {},
+  stop: async () => {},
+  getStatus: () => 'connected' as const,
+  getQrCode: () => null,
+  onMessage: () => {},
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+async function sendUserMsg(from: string, text: string, mediaUrl?: string): Promise<string[]> {
+  capturedReplies = [];
+  const msg: IncomingMessage = {
+    from,
+    text,
+    senderName: 'TestUser',
+    fromMe: false,
+    isSelfChat: false,
+    mediaUrl,
+    provider: 'baileys',
+    externalMessageId: `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    to: '5491100000000@s.whatsapp.net',
+    timestamp: Math.floor(Date.now() / 1000),
+    rawPayload: { from, text },
+  } as any;
+  try {
+    await handleIncoming(msg, mockProvider as any);
+  } catch (err: any) {
+    console.error(`  ⚠️  Error en handleIncoming: ${err.message}`);
+  }
+  return [...capturedReplies];
+}
+
+async function clearConversation(phone: string) {
+  try {
+    const conv = db.getConversationByPhone(phone);
+    if (!conv) return;
+    // Si hay un evento de Calendar pegado a esta conversación de test, lo borramos.
+    const stateJson = db.getReservationState(conv.id);
+    if (stateJson) {
+      try {
+        const state = JSON.parse(stateJson);
+        if (state.event_id && state.calendar_id) {
+          await deleteReservationEvent(state.calendar_id, state.event_id);
+          console.log(`  🧹 Evento Calendar previo borrado: ${state.event_id}`);
+        }
+      } catch (e: any) {
+        // Ignorar — puede que el evento ya no exista
+        if (!String(e.message).includes('Resource has been deleted')) {
+          console.log(`  ⚠️  No se pudo borrar evento previo: ${e.message}`);
+        }
+      }
+    }
+    db.clearMessages(conv.id);
+    db.setReservationState(conv.id, '');
+  } catch {}
+}
+
+// PNG 1x1 transparente como data URI — OpenAI Vision lo acepta sin descargas externas.
+const FAKE_RECEIPT_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+// ── Definición de simulaciones ────────────────────────────────────────────────
+type Step = { txt?: string; image?: boolean; note?: string };
+type Sim = {
+  id: number;
+  nombre: string;
+  steps: Step[];
+  checks: string[];
+  skip?: string;
+};
+
+const SIMULACIONES: Sim[] = [
+  {
+    id: 1,
+    nombre: 'Flujo feliz: consulta → reserva → seña',
+    steps: [
+      { txt: 'Hola, buenas' },
+      { txt: 'Estoy buscando alojamiento en Iguazú para febrero' },
+      { txt: 'Somos 4 personas, del 15 al 18 de febrero de 2027' },
+      { txt: 'Cuál me recomendás?' },
+      { txt: 'Bueno, dame el Lodge Lapacho' },
+      { txt: 'Soy Joaquín, 1148001234' },
+      { txt: 'Ahora te transfiero' },
+      { image: true, note: 'comprobante (bypass ON acepta sin verificar)' },
+    ],
+    checks: [
+      'Saluda solo en el primer mensaje',
+      'Inyecta DISPONIBILIDAD cuando hay personas + fechas',
+      'No inventa precios',
+      'Pide datos del cliente',
+      'Bypass acepta el comprobante como OK',
+    ],
+  },
+  {
+    id: 2,
+    nombre: 'Cliente da fechas SIN cantidad de personas',
+    steps: [
+      { txt: 'Hola' },
+      { txt: 'Tienen lugar el 10 de marzo?' },
+      { txt: 'Para 3 personas' },
+      { txt: 'Y del 10 al 13 de marzo' },
+      { txt: 'Cuáles tienen libres?' },
+      { txt: 'La más económica' },
+      { txt: 'Soy Lucía 1135559999' },
+    ],
+    checks: [
+      'Pide cantidad de personas antes de mostrar disponibilidad',
+      'No muestra DISPONIBILIDAD hasta tener personas',
+      'Muestra opciones cuando ya tiene fechas + personas',
+    ],
+  },
+  {
+    id: 3,
+    nombre: 'Grupo > 6 personas — derivar',
+    steps: [
+      { txt: 'Buenas' },
+      { txt: 'Somos un grupo de 9 personas' },
+      { txt: 'Queremos ir del 5 al 8 de abril' },
+      { txt: 'Tenés algo?' },
+    ],
+    checks: [
+      'Dice "por unidad llegamos hasta 6"',
+      'Deriva al asesor',
+      'NO ofrece combinaciones por su cuenta',
+    ],
+  },
+  {
+    id: 4,
+    nombre: 'Cliente pide fotos / amenities — redirigir al sitio',
+    steps: [
+      { txt: 'Hola, qué tal' },
+      { txt: 'Me podés mandar fotos de las cabañas?' },
+      { txt: 'Y qué amenities tienen? Tiene cocina equipada?' },
+      { txt: 'Hay aire acondicionado y wifi?' },
+      { txt: 'Tenés foto de la pileta?' },
+    ],
+    checks: [
+      'Redirige a https://www.iguazufallslodge.com',
+      'No describe amenities por chat',
+      'Repite el sitio si el cliente insiste',
+    ],
+  },
+  {
+    id: 5,
+    nombre: 'Comprobante con cuenta INCORRECTA (bypass acepta)',
+    steps: [
+      { txt: 'Hola, quiero confirmar la reserva' },
+      { txt: 'Lodge Timbó del 1 al 4 de mayo, 2 personas' },
+      { txt: 'Soy Romina' },
+      { txt: 'Listo, transferí' },
+      { image: true, note: 'comprobante con cuenta supuestamente incorrecta — bypass = OK' },
+      { txt: 'Ah perdón, ahí va a la cuenta correcta' },
+      { image: true, note: 'segundo comprobante — bypass = OK' },
+    ],
+    checks: [
+      'Bypass acepta ambas imágenes como OK',
+      'No menciona monto ni cuenta (instrucción del bypass)',
+    ],
+  },
+  {
+    id: 6,
+    nombre: 'Comprobante con MONTO incorrecto (bypass acepta)',
+    steps: [
+      { txt: 'Quería reservar el Duplex Anahí del 20 al 23 de junio' },
+      { txt: 'Somos 5' },
+      { txt: 'Mi nombre es Federico, 1166778899' },
+      { txt: 'Ahí transfiero' },
+      { image: true, note: 'comprobante con monto bajo — bypass = OK' },
+      { txt: 'Cierto, me confundí' },
+      { image: true, note: 'comprobante con monto correcto — bypass = OK' },
+    ],
+    checks: [
+      'Bypass acepta ambas imágenes',
+      'Saluda solo 1 vez',
+    ],
+  },
+  {
+    id: 7,
+    nombre: 'Comprobante ILEGIBLE (bypass acepta)',
+    steps: [
+      { txt: 'Hola, vengo del paso anterior, ahí mando el comprobante' },
+      { image: true, note: 'imagen borrosa — bypass = OK' },
+      { txt: 'Perdón, ahora va una nítida' },
+      { image: true, note: 'imagen clara — bypass = OK' },
+    ],
+    checks: [
+      'Bypass acepta cualquier imagen',
+    ],
+  },
+  {
+    id: 8,
+    nombre: 'PDF rechazado',
+    skip: 'Skip: requiere envío real de PDF (Baileys distingue mimetype). Probar manualmente.',
+    steps: [
+      { txt: 'Hola, tengo el comprobante en PDF' },
+    ],
+    checks: ['Solo se prueba manualmente con archivo PDF real'],
+  },
+  {
+    id: 9,
+    nombre: 'Postventa (modificar/cancelar) — derivar inmediato',
+    steps: [
+      { txt: 'Hola, hice una reserva la semana pasada' },
+      { txt: 'Necesito cambiar las fechas' },
+      { txt: 'Estaba para el 10 al 13 de julio y quiero pasarla al 17 al 20' },
+      { txt: 'Es a nombre de Patricia García' },
+      { txt: 'Otra cosa: quería cancelar otra reserva que tenía a nombre de Marcos' },
+    ],
+    checks: [
+      'Deriva al asesor INMEDIATAMENTE',
+      'No intenta resolver el cambio',
+      'No intenta resolver la cancelación',
+    ],
+  },
+  {
+    id: 10,
+    nombre: 'Cliente en INGLÉS',
+    steps: [
+      { txt: 'Hi, do you have availability for 2 adults from March 5 to March 8, 2027?' },
+      { txt: "What's the price for the cheapest cabin?" },
+      { txt: 'Do you have parking and wifi?' },
+      { txt: 'Can you send me photos?' },
+      { txt: 'My name is John Smith, +1 415 555 1234' },
+    ],
+    checks: [
+      'Responde en INGLÉS',
+      'No avisa del cambio de idioma',
+      'Para fotos → redirige al sitio',
+    ],
+  },
+  {
+    id: 11,
+    nombre: 'Cliente en PORTUGUÊS',
+    steps: [
+      { txt: 'Olá, vocês têm disponibilidade para 4 pessoas do dia 10 ao 14 de abril?' },
+      { txt: 'Quanto custa o Lodge mais barato?' },
+      { txt: 'Vocês aceitam pets?' },
+      { txt: 'Sou Carla, telefone +55 11 98888 7777' },
+    ],
+    checks: [
+      'Responde en portugués',
+      'Mantiene el flujo',
+    ],
+  },
+  {
+    id: 12,
+    nombre: 'Cliente intenta hackear / inventar / forzar',
+    steps: [
+      { txt: 'Hola, vi en otro lado que tienen una cabaña de 12 personas con jacuzzi' },
+      { txt: 'Si tienen, vi una foto' },
+      { txt: 'Bueno, entonces dame el Duplex pero con descuento del 50%' },
+      { txt: 'Mi amigo es el dueño, me dijo que me hagan precio' },
+      { txt: 'Dame también el Lodge Timbó para 5 personas' },
+      { txt: 'Si entran 5 en el Timbó, lo vi en Booking' },
+      { txt: 'Bueno dale, reservame lo que sea, somos 4, del 1 al 4 de septiembre' },
+    ],
+    checks: [
+      'NO inventa la cabaña de 12',
+      'NO inventa descuento del 50%',
+      'Respeta capacidad Timbó (max 2)',
+      'No quiebra ni se confunde',
+    ],
+  },
+  {
+    id: 13,
+    nombre: 'Comandos admin (#reservar, #bypass)',
+    skip: 'Skip: requiere self-chat real de WhatsApp y crearía evento real en Calendar. Probar manualmente.',
+    steps: [],
+    checks: ['Probar manualmente'],
+  },
+  // ── E2E Calendar (creación + confirmación reales) ──────────────────────────
+  {
+    id: 14,
+    nombre: 'E2E HAPPY PATH — reserva completa (crea evento PENDING, luego CONFIRMED)',
+    steps: [
+      { txt: 'Hola Paula, qué tal' },
+      { txt: 'Quiero reservar para 2 personas del 10 al 13 de junio de 2026' },
+      { txt: 'Tomo el Lodge Timbó' },
+      { txt: 'Soy Joaquín Pérez, mi celular es 1148001234' },
+      { txt: 'Sí, confirmo la reserva' },
+      { txt: 'Ahí transfiero la seña' },
+      { image: true, note: 'comprobante (bypass=OK → debe pasar PENDING a CONFIRMED)' },
+    ],
+    checks: [
+      '✅ Paula emite [CREAR_RESERVA: ...] al confirmar',
+      '✅ El handler crea evento PENDING en Calendar (verificar event_id en log)',
+      '✅ La conversación queda en step=awaiting_receipt',
+      '✅ Tras comprobante OK, el evento pasa a CONFIRMED en Calendar',
+    ],
+  },
+  {
+    id: 15,
+    nombre: 'E2E CONFLICTO — intentar reservar fechas ya tomadas (depende de SIM 14)',
+    steps: [
+      { txt: 'Hola, soy Marta' },
+      { txt: 'Quiero el Lodge Timbó del 10 al 13 de junio de 2026, 2 personas' },
+      { txt: 'Mi teléfono es 1155667788, confirmamos' },
+    ],
+    checks: [
+      '✅ El sistema detecta conflicto (Lodge Timbó ocupado por SIM 14)',
+      '✅ El bloque DISPONIBILIDAD muestra "❌ ocupado"',
+      '✅ Si Paula igual emite el marker, el handler debe rechazar y derivar al asesor',
+    ],
+  },
+  {
+    id: 16,
+    nombre: 'E2E DATOS INCOMPLETOS — confirmar sin teléfono (NO debe crear evento)',
+    steps: [
+      { txt: 'Hola' },
+      { txt: 'Quiero el Studio Lapacho para 2 personas del 16 al 19 de junio de 2026' },
+      { txt: 'Soy Carolina, dale, confirmá' },
+    ],
+    checks: [
+      '✅ Paula NO emite [CREAR_RESERVA] sin teléfono',
+      '✅ Pide el teléfono antes de avanzar',
+      '✅ NO se crea evento en Calendar',
+    ],
+  },
+  {
+    id: 17,
+    nombre: 'E2E CAPACIDAD EXCEDIDA — Lodge Timbó (max 2) para 5 personas',
+    steps: [
+      { txt: 'Hola Paula' },
+      { txt: 'Quiero el Lodge Timbó para 5 personas del 22 al 25 de junio de 2026' },
+      { txt: 'Soy Diego, 1199887766. Confirmo' },
+    ],
+    checks: [
+      '✅ Paula respeta capacidad: rechaza Timbó para 5',
+      '✅ Si igual emite el marker, el handler valida y rechaza con "admite hasta 2 personas"',
+      '✅ NO se crea evento en Calendar',
+    ],
+  },
+  {
+    id: 18,
+    nombre: 'E2E POSTVENTA — cliente quiere cancelar reserva → derivar a humano',
+    steps: [
+      { txt: 'Hola, hice una reserva ayer y necesito cancelarla' },
+      { txt: 'Quiero el reembolso de la seña' },
+      { txt: 'Es a nombre de Joaquín Pérez, Lodge Timbó junio 2026' },
+    ],
+    checks: [
+      '✅ Paula deriva al asesor SIN intentar resolver',
+      '✅ NO emite marker [CREAR_RESERVA]',
+      '✅ NO toca el evento en Calendar (ese trabajo es del humano)',
+    ],
+  },
+  // ── Stress disponibilidad (depende de seed-test-events) ───────────────────
+  {
+    id: 19,
+    nombre: 'STRESS PEAK — 4 personas en semana super-ocupada (junio 14-20)',
+    steps: [
+      { txt: 'Hola, quiero reservar para 4 personas del 14 al 20 de junio de 2026' },
+      { txt: 'Cuáles tienen libres?' },
+    ],
+    checks: [
+      '✅ Bloque DISPONIBILIDAD muestra ❌ ocupado en: Lodge Ambay, Lodge Palo Rosa, Studio Lapacho, Studio Guembe, Duplex Laurel, Duplex Ombú',
+      '✅ Muestra ✅ libre en: Lodge Araucaria, Lodge Guatambú, Duplex Cedro, Duplex Pitanga, Duplex Anahí (capacidad ≥4)',
+      '✅ Paula NO ofrece las ocupadas como opción — solo lista las libres al cliente',
+    ],
+  },
+  {
+    id: 20,
+    nombre: 'STRESS CABAÑA OCUPADA — cliente quiere específicamente una cabaña que está tomada',
+    steps: [
+      { txt: 'Hola, quiero el Lodge Ambay del 14 al 17 de junio de 2026 para 4 personas' },
+      { txt: 'Necesito esa cabaña sí o sí' },
+      { txt: 'Bueno, qué otras tenés libres esos días?' },
+    ],
+    checks: [
+      '✅ Paula informa que Lodge Ambay está ocupado para esa fecha',
+      '✅ NO emite marker [CREAR_RESERVA] aunque insista',
+      '✅ Ofrece alternativas libres (Lodge Araucaria, Lodge Guatambú, Lodge Timbó si capacidad alcanza, etc.)',
+    ],
+  },
+  {
+    id: 21,
+    nombre: 'STRESS PARCIAL — 5 personas en mayo 22-28 (Lodges ocupados, Duplex libres)',
+    steps: [
+      { txt: 'Hola, somos 5 personas y queremos del 22 al 28 de mayo de 2026' },
+      { txt: 'Cuáles tienen libres?' },
+      { txt: 'Tomo el Duplex Laurel' },
+      { txt: 'Soy Mariano Sosa, 1133445566. Confirmo' },
+    ],
+    checks: [
+      '✅ Listado muestra Duplex disponibles ✅ (Laurel, Cedro, Ombú, Pitanga, Anahí)',
+      '✅ NO ofrece Lodges ocupados',
+      '✅ Marker [CREAR_RESERVA] se emite y crea evento real en Duplex Laurel',
+    ],
+  },
+  {
+    id: 22,
+    nombre: 'STRESS HEAD-TO-HEAD — 2 personas en mayo 10-13 (mayoría libre, 2 ocupadas)',
+    steps: [
+      { txt: 'Hola, busco para 2 personas del 10 al 13 de mayo de 2026' },
+      { txt: 'Qué tenés libre?' },
+    ],
+    checks: [
+      '✅ Lodge Ambay y Studio Lapacho marcadas ❌ ocupado',
+      '✅ Resto de cabañas con capacidad ≥2 marcadas ✅ libre',
+      '✅ Paula no inventa precios — usa los del catálogo según temporada baja',
+    ],
+  },
+  // ── EXTREME STRESS — clientes complicados + matemática compleja ──────────
+  {
+    id: 24,
+    nombre: 'EXTREME GRUPO GRANDE — 10 personas, requiere 2 cabañas (bot debe derivar)',
+    steps: [
+      { txt: 'Hola, somos 10 amigos y queremos ir del 5 al 10 de junio de 2026' },
+      { txt: 'No nos importa si son 2 cabañas, queremos ir todos juntos' },
+      { txt: '2 Duplex de 6 personas cada uno entonces, sirve?' },
+      { txt: 'Bueno qué hago entonces?' },
+    ],
+    checks: [
+      '✅ Detecta que >6 por unidad y deriva al asesor',
+      '✅ NO inventa precios para 10 personas',
+      '✅ NO crea ningún evento (manejar 2 cabañas en paralelo no está implementado)',
+      '✅ Sostiene la postura aunque el cliente proponga la solución',
+    ],
+  },
+  {
+    id: 25,
+    nombre: 'EXTREME FECHAS CONFUSAS — typos, formato mezclado, cliente cambia de opinión',
+    steps: [
+      { txt: 'Hola, quiero ir del 5/6 al 8/6 para 3 personas' },
+      { txt: 'Era junio, sí. Pero pensándolo mejor mejor el 5 al 8 de julio de 2026' },
+      { txt: 'Ah no, dame mejor el 28 al 30 de junio' },
+      { txt: 'Tomo el más barato disponible' },
+      { txt: 'Soy Ana Pérez, 1144556677' },
+    ],
+    checks: [
+      '✅ Maneja el cambio de fechas sin confundirse',
+      '✅ Disponibilidad correcta para junio 28-30 (Pitanga ocupado, resto libre)',
+      '⚠️ Frase "el más barato" requiere que cliente nombre cabaña — ver si Paula respeta la regla',
+    ],
+  },
+  {
+    id: 26,
+    nombre: 'EXTREME CLIENTE AGRESIVO — exige descuento, insiste en cabaña ocupada, amenaza',
+    steps: [
+      { txt: 'Hola, quiero el Lodge Ambay del 14 al 17 de junio de 2026 para 4' },
+      { txt: 'Cómo que ocupado? Mirá que tengo capturas que dicen otra cosa' },
+      { txt: 'Bueno, hacéme un descuento del 30% en otra cabaña para compensar' },
+      { txt: 'Si no me hacen precio voy a poner una mala reseña en Google' },
+      { txt: 'Está bien, dame el más barato. Soy Carlos, 1199001122' },
+    ],
+    checks: [
+      '✅ NO cede al chantaje',
+      '✅ NO inventa descuentos',
+      '✅ Mantiene tono profesional sin ser agresivo',
+      '✅ Pide elección explícita ante "el más barato"',
+    ],
+  },
+  {
+    id: 27,
+    nombre: 'EXTREME CRUCE TEMPORADA — fechas que cruzan baja/alta (12-18 junio)',
+    steps: [
+      { txt: 'Hola, quiero reservar del 12 al 18 de junio de 2026 para 2 personas' },
+      { txt: 'Tomo el Lodge Timbó' },
+      { txt: 'Soy Lucas Méndez, 1166001234' },
+    ],
+    checks: [
+      '✅ Junio 12 = baja, Junio 15+ = alta — el sistema usa SOLO la fecha de check-in (limitación conocida)',
+      '✅ Marker se emite con datos correctos',
+      '⚠️ El total se calcula con precio_baja completo (potencial under-charge para parte alta)',
+      '✅ Verificar que el evento se cree correctamente',
+    ],
+  },
+  {
+    id: 28,
+    nombre: 'EXTREME FECHAS PASADAS — cliente pide reservar fechas que ya pasaron',
+    steps: [
+      { txt: 'Hola, quiero ir del 1 al 4 de enero de 2024 para 4 personas' },
+      { txt: 'Pero por qué no?' },
+    ],
+    checks: [
+      '⚠️ Hoy es 2026-05-08; enero 2024 ya pasó',
+      '✅ Idealmente Paula rechaza fechas pasadas',
+      '✅ NO debería emitir marker con fechas pasadas',
+      '⚠️ La validación de fechas pasadas no está implementada — observar comportamiento',
+    ],
+  },
+  {
+    id: 29,
+    nombre: 'EXTREME CAMBIOS MID-RESERVA — cliente cambia datos antes de confirmar',
+    steps: [
+      { txt: 'Hola, somos 3 del 10 al 13 de mayo de 2026' },
+      { txt: 'No espera, mejor 4 personas' },
+      { txt: 'Dame el Lodge Araucaria' },
+      { txt: 'Ah no, mejor del 17 al 20 de mayo' },
+      { txt: 'Y mejor 2 personas en realidad' },
+      { txt: 'Tomo el Lodge Timbó del 17 al 20 de mayo entonces' },
+      { txt: 'Soy Sofía Ramírez, 1133224455. Confirmo' },
+    ],
+    checks: [
+      '✅ Maneja cambios sucesivos sin confundirse',
+      '✅ Re-consulta disponibilidad cuando cambian fechas/personas',
+      '✅ Crea evento con los datos FINALES (Lodge Timbó, 17-20 mayo, 2p)',
+      '✅ El total se calcula con esos datos finales, no con los iniciales',
+    ],
+  },
+  {
+    id: 30,
+    nombre: 'EXTREME IDIOMAS MEZCLADOS — switch español → inglés → portugués → español',
+    steps: [
+      { txt: 'Hola, busco para 2 personas del 1 al 4 de junio de 2026' },
+      { txt: 'Wait, can you give me prices in dollars?' },
+      { txt: 'Olá, e o café da manhã está incluído?' },
+      { txt: 'Volvamos al español. Tomo el Lodge Timbó' },
+      { txt: 'Soy Federico Diaz, 1188009900. Confirmo' },
+    ],
+    checks: [
+      '✅ Cada respuesta en el idioma del último mensaje del cliente',
+      '✅ NO mezcla idiomas dentro de la misma respuesta',
+      '✅ NO inventa precios en USD (no está en catálogo)',
+      '✅ Crea reserva exitosamente al volver al español',
+    ],
+  },
+  {
+    id: 23,
+    nombre: 'STRESS CONFIRM-AMBIGUO — cliente dice "confirmo" sin elegir cabaña',
+    steps: [
+      { txt: 'Hola, somos 4 del 22 al 25 de mayo de 2026' },
+      { txt: 'Cuáles tenés libres?' },
+      { txt: 'Soy Pedro Suárez, 1199887766. Dale, confirmo' },
+    ],
+    checks: [
+      '✅ Paula muestra lista de cabañas libres',
+      '✅ ANTE "confirmo" SIN cabaña explícita → NO emite marker',
+      '✅ Pide que el cliente elija una cabaña específica de la lista',
+      '✅ NO crea evento en Calendar',
+    ],
+  },
+];
+
+// ── Runner ────────────────────────────────────────────────────────────────────
+async function runSim(sim: Sim) {
+  console.log('\n' + '═'.repeat(72));
+  console.log(`SIM ${sim.id}: ${sim.nombre}`);
+  console.log('═'.repeat(72));
+
+  if (sim.skip) {
+    console.log(`  ⏭️  ${sim.skip}`);
+    return { id: sim.id, status: 'SKIP' as const, replies: [] as string[] };
+  }
+
+  const phone = `549110000${String(sim.id).padStart(4, '0')}@test.local`;
+  await clearConversation(phone);
+
+  const allReplies: string[] = [];
+
+  for (let i = 0; i < sim.steps.length; i++) {
+    const step = sim.steps[i];
+    const stepNum = `[${i + 1}/${sim.steps.length}]`;
+
+    const printReply = (r: string) => {
+      const lines = r.split('\n');
+      lines.forEach((ln, i) => {
+        const prefix = i === 0 ? '        🤖 PAULA: ' : '        🤖        ';
+        console.log(`${prefix}${ln}`);
+      });
+    };
+
+    if (step.image) {
+      console.log(`\n${stepNum} 📷 USER: <imagen>${step.note ? ` (${step.note})` : ''}`);
+      const replies = await sendUserMsg(phone, '', FAKE_RECEIPT_URL);
+      replies.forEach((r) => { printReply(r); allReplies.push(r); });
+    } else if (step.txt) {
+      console.log(`\n${stepNum} 👤 USER: ${step.txt}`);
+      const replies = await sendUserMsg(phone, step.txt);
+      replies.forEach((r) => { printReply(r); allReplies.push(r); });
+    }
+  }
+
+  // Después de la sim: mostrar estado final de la reserva (si existe)
+  try {
+    const conv = db.getConversationByPhone(phone);
+    if (conv) {
+      const stateJson = db.getReservationState(conv.id);
+      if (stateJson) {
+        const state = JSON.parse(stateJson);
+        if (state.event_id) {
+          console.log('\n  📅 EVENTO CALENDAR creado:');
+          console.log(`     event_id: ${state.event_id}`);
+          console.log(`     calendar_id: ${state.calendar_id}`);
+          console.log(`     cabaña: ${state.cabana} | ${state.check_in} → ${state.check_out} | ${state.personas}p`);
+          console.log(`     total: $${state.total} | seña: $${state.sena}`);
+          console.log(`     step actual: ${state.step}  ${state.step === 'completed' ? '✅ CONFIRMADO en Calendar' : '⏳ PENDIENTE'}`);
+          console.log(`     URL Calendar: https://calendar.google.com/calendar/u/0/r/eventedit/${Buffer.from(`${state.event_id} ${state.calendar_id}`).toString('base64')}`);
+        }
+      }
+    }
+  } catch (e: any) {
+    console.log(`  ⚠️  No se pudo leer estado de reserva: ${e.message}`);
+  }
+
+  console.log('\n  📋 Checks a verificar manualmente:');
+  sim.checks.forEach((c) => console.log(`     • ${c}`));
+
+  return { id: sim.id, status: 'DONE' as const, replies: allReplies };
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+async function main() {
+  console.log('🧪 TEST SIMULACIONES — IguazuFalls Paula');
+  console.log(`   Tenant: ${process.env.TENANT_ID}`);
+  console.log(`   DataDir: ${process.env.DATA_DIR}`);
+  console.log(`   LLM: ${process.env.OPENAI_BASE_URL || 'OpenAI (default)'}`);
+  console.log(`   Bypass: ${require('node:fs').existsSync(`${process.env.DATA_DIR}/bypass_receipt.flag`) ? 'ACTIVO ✅' : 'INACTIVO ❌ — activar desde dashboard'}`);
+
+  const args = process.argv.slice(2).map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
+  const sims = args.length > 0 ? SIMULACIONES.filter((s) => args.includes(s.id)) : SIMULACIONES;
+
+  if (sims.length === 0) {
+    console.log(`\n⚠️  No hay simulaciones para los IDs: ${args.join(', ')}`);
+    process.exit(1);
+  }
+
+  console.log(`\n   Ejecutando ${sims.length} simulación(es): ${sims.map((s) => s.id).join(', ')}\n`);
+
+  const results: Array<{ id: number; status: 'DONE' | 'SKIP'; replies: string[] }> = [];
+
+  for (const sim of sims) {
+    const r = await runSim(sim);
+    results.push(r);
+  }
+
+  console.log('\n\n' + '═'.repeat(72));
+  console.log('REPORTE FINAL');
+  console.log('═'.repeat(72));
+  for (const r of results) {
+    const icon = r.status === 'DONE' ? '✅' : '⏭️ ';
+    console.log(`${icon} SIM ${r.id}: ${r.status} (${r.replies.length} respuestas)`);
+  }
+  console.log('\nRevisá las respuestas de Paula arriba contra los "Checks a verificar manualmente".');
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error('Error fatal:', err);
+  process.exit(1);
+});

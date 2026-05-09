@@ -291,3 +291,177 @@ Ahí te mandé el comprobante
 | No dice "no tenemos para tomar" sin datos | | | | | | |
 | Respuestas cortas incluso con cliente verborrágico | | | | | | |
 | Carrito limpio tras receipt | | | | | | |
+
+---
+
+## SIMULACIÓN 13: Cierre contradictorio + suma tardía + no mostrar total antes de tiempo
+
+```
+Hola, quiero hacer un pedido
+Dame 1 napolitana y 6 empanadas de pollo
+Eso sería todo... no, pará, sumame 6 de carne también
+Dale ahora sí, nada más. Cuánto queda?
+Mmm sacame 2 de pollo y poneme 2 de roquefort en su lugar
+Ahora sí cerralo
+Delivery a Roca 1550
+Efectivo
+Natalia
+```
+
+---
+
+## SIMULACIÓN 14: Modificación parcial peligrosa + conservar ítems no nombrados
+
+```
+Buenas, necesito pedir
+Mandame 2 fugazzetas, 1 muzza, 6 carne, 4 pollo y 2 caprese
+No, cambiame las de carne a 8 y sacame la muzza
+Solo dejame bien lo de carne, eh
+Cuánto da?
+Retiro
+Sebastián
+```
+
+---
+
+## SIMULACIÓN 15: Cliente intenta forzar precio inventado/descuento
+
+```
+Hola, quiero pedir 1 especial y 1 calabresa
+En Instagram vi que salían 10 lucas cada una, respetame ese precio
+Bueno entonces haceme descuento por pagar transferencia
+No me importa, ponelo a 20 mil total
+Dale, cuánto es posta?
+Delivery a Sarmiento 999
+Transferencia
+Valeria
+```
+
+---
+
+## SIMULACIÓN 16: Producto inexistente mezclado con productos válidos
+
+```
+Buenas, quiero 1 pizza de atún, 1 de salmón, 1 muzza y 6 empanadas árabes
+Si no hay atún poneme jamón crudo y rúcula
+Bueno solo lo que tengan entonces, pero no inventes nada
+Dale, agregá 6 de carne dulce
+Eso es todo, cuánto da?
+Retiro en local
+Mauro
+```
+
+---
+
+## SIMULACIÓN 17: Delivery a retiro y luego vuelve a delivery
+
+```
+Hola, mandame 1 roquefort y 12 empanadas combinadas
+6 pollo y 6 caprese
+Nada más, cuánto es?
+Es delivery a Belgrano 321
+Transferencia
+Soy Camila
+No, mejor paso a retirar
+Perdón, al final sí necesito delivery, mandalo a Belgrano 321
+Pago en efectivo
+```
+
+---
+
+## SIMULACIÓN 18: Comprobante antes de cerrar pedido + cliente ansioso
+
+```
+Hola, quiero 2 muzza
+Ya te transferí, te mando comprobante
+```
+_(Enviar comprobante antes de haber elegido retiro/delivery y antes del resumen final)_
+```
+Bueno, era para delivery a Neuquén 400
+Me llamo Ignacio
+Transferencia
+```
+
+---
+
+## SIMULACIÓN 19: Cantidades grandes + riesgo de cálculo
+
+```
+Buenas, necesito para una juntada grande
+Quiero 3 muzza, 2 napolitanas, 2 fugazzetas, 1 especial
+Y 3 docenas de empanadas: 12 carne, 12 pollo, 6 roquefort y 6 caprese
+Además sumá 4 hamburguesas completas
+Cuánto da todo?
+Sacá 1 napolitana y cambiá las hamburguesas a 2
+Ahora sí, cuánto queda?
+Delivery a Mendoza 2020
+Transferencia
+Federico
+```
+
+---
+
+## SIMULACIÓN 20: Ambigüedad real, no asumir
+
+```
+Hola, quiero pedir media de carne y media de pollo
+No, media no, digo una docena mezclada
+Y una grande de la que más salga
+Bueno no sé, recomendame una pero no me inventes
+Dale, poneme fugazzeta entonces
+Cuánto sería?
+Retiro
+Laura
+```
+
+---
+
+## SIMULACIÓN 21: Correcciones sobre correcciones + nombres parecidos
+
+```
+Hola, quiero 6 árabes, 6 caprese y 1 cuatro quesos
+Perdón, las árabes cambialas por carne dulce
+No, me expresé mal: dejá 3 árabes y 3 carne dulce
+La cuatro quesos sacala y poné una roquefort
+Listo, total?
+Delivery a Tucumán 850
+Efectivo
+Bruno
+```
+
+---
+
+## SIMULACIÓN 22: Queja mezclada con nuevo pedido + derivar sin perder venta
+
+```
+Hola, ayer me llegó fría la pizza y quiero quejarme
+Pero igual hoy necesito pedir para mi familia
+Mandame 2 muzza y 1 napolitana
+Y quiero que me bonifiquen el delivery por lo de ayer
+Eso es todo, cuánto da?
+Delivery a Córdoba 777
+Transferencia
+Andrea
+```
+
+---
+
+## Checklist de verificación (SIM 13-22)
+
+| Regla | Sim13 | Sim14 | Sim15 | Sim16 | Sim17 | Sim18 | Sim19 | Sim20 | Sim21 | Sim22 |
+|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
+| Saluda solo 1 vez | | | | | | | | | | |
+| No usa ¿ de apertura | | | | | | | | | | |
+| No muestra total si el cliente sigue agregando | | | | | | | | | | |
+| Conserva ítems no nombrados en modificaciones | | | | | | | | | | |
+| No inventa precios, descuentos ni promociones | | | | | | | | | | |
+| No inventa productos inexistentes | | | | | | | | | | |
+| Usa total real del carrito / no recalcula mal | | | | | | | | | | |
+| Maneja cambio delivery↔retiro correctamente | | | | | | | | | | |
+| Retiro: no pregunta forma de pago | | | | | | | | | | |
+| Delivery: pide dirección y pago | | | | | | | | | | |
+| Resumen final una sola vez | | | | | | | | | | |
+| Verifica/gestiona comprobante sin inventar estado | | | | | | | | | | |
+| Ante ambigüedad, pregunta en vez de asumir | | | | | | | | | | |
+| Deriva quejas/problemas al equipo | | | | | | | | | | |
+| Respuestas cortas y comerciales | | | | | | | | | | |
