@@ -78,6 +78,23 @@ if (IS_IGUAZU) {
   console.log(`[handler] Bypass comprobante: ${isBypassActive() ? 'ACTIVO' : 'inactivo'}`);
 }
 
+// --- Bot pausado — flag global para desactivar el bot de un tenant ---
+const BOT_PAUSED_FILE = path.join(path.resolve(_tenant.dataDir), 'bot_paused.flag');
+
+function isBotPaused(): boolean {
+  return fs.existsSync(BOT_PAUSED_FILE);
+}
+
+function setBotPaused(paused: boolean): void {
+  if (paused) {
+    fs.writeFileSync(BOT_PAUSED_FILE, '1');
+  } else {
+    try { fs.unlinkSync(BOT_PAUSED_FILE); } catch { /* ya no existe */ }
+  }
+}
+
+console.log(`[handler] Bot: ${isBotPaused() ? 'PAUSADO' : 'ACTIVO'}`);
+
 async function buildIguazufallsExtras(
   msg: IncomingMessage,
   conversationId: number
@@ -268,6 +285,8 @@ const ADMIN_HELP =
   '#ia NUMERO — activar modo IA\n' +
   '#humano NUMERO — activar modo humano\n' +
   '#reset NUMERO — borrar memoria\n' +
+  '#bot on — reactivar bot (todas las conversaciones)\n' +
+  '#bot off — pausar bot (todas las conversaciones)\n' +
   (IS_IGUAZU
     ? '#reservar TEL "CABAÑA" CHECKIN CHECKOUT PERS TOTAL SEÑA "NOMBRE" — crear reserva manual\n' +
       '#bypass on — omitir verificación de comprobante (modo test)\n' +
@@ -332,6 +351,21 @@ async function handleAdminCommand(
 
   const digits = (parts[1] ?? '').replace(/\D/g, '');
 
+  if (cmd === '#bot') {
+    const sub = (parts[1] ?? '').toLowerCase();
+    if (sub === 'off') {
+      setBotPaused(true);
+      await provider.sendMessage(msg.from, '🔴 Bot PAUSADO — todas las conversaciones quedan en modo manual. Usá #bot on para reactivar.');
+    } else if (sub === 'on') {
+      setBotPaused(false);
+      await provider.sendMessage(msg.from, '🟢 Bot ACTIVO — respondiendo normalmente.');
+    } else {
+      const estado = isBotPaused() ? '🔴 PAUSADO' : '🟢 ACTIVO';
+      await provider.sendMessage(msg.from, `Estado del bot: ${estado}\nUso: #bot on | #bot off`);
+    }
+    return;
+  }
+
   if (!digits) {
     await provider.sendMessage(msg.from, ADMIN_HELP);
     return;
@@ -392,6 +426,11 @@ export async function handleIncoming(
   const fresh = getConversationById(convo.id);
   if (!fresh || fresh.mode !== 'AI') {
     console.log(`[handler] Conversacion ${convo.id} en modo HUMAN - sin auto-respuesta`);
+    return;
+  }
+
+  if (isBotPaused()) {
+    console.log(`[handler] Bot PAUSADO — mensaje de ${msg.from} guardado sin auto-respuesta`);
     return;
   }
 
