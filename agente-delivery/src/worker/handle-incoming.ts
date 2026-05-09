@@ -107,12 +107,19 @@ async function buildIguazufallsExtras(
   const intent = detectIntent(msg.text ?? '', !!msg.mediaUrl);
   const blocks: string[] = [];
 
-  // Si el turno anterior hubo un error de disponibilidad (fechas pasadas, etc.),
+// Si el turno anterior hubo un error de disponibilidad (fechas pasadas, etc.),
   // inyectamos la instrucción para Paula en este turno
   if (state && (state as any).step === 'disp_error' && (state as any).error) {
     console.log(`[handler] Inyectando error previo de DISPONIBILIDAD: ${(state as any).error.substring(0, 60)}...`);
     blocks.push((state as any).error);
-    // Limpiar el error para que no se repita
+    db.setReservationState(conversationId, '');
+  }
+
+  // Si el turno anterior generó DISPONIBILIDAD (disp_ready), inyectarla ahora
+  // para que Paula muestre las cabañas al cliente
+  if (state && (state as any).step === 'disp_ready' && (state as any).data) {
+    console.log(`[handler] Inyectando DISPONIBILIDAD lista para mostrar`);
+    blocks.push((state as any).data);
     db.setReservationState(conversationId, '');
   }
 
@@ -552,15 +559,16 @@ export async function handleIncoming(
 
         // Si es un error real (fechas pasadas, sin cabañas) → NO mostrar al cliente
         // "INSTRUCCIÓN" aparece también en el bloque normal, así que chequeamos frases de error
-        if (dispBlock.includes('ya pasaron') || dispBlock.includes('ninguna cabaña admite')) {
+if (dispBlock.includes('ya pasaron') || dispBlock.includes('ninguna cabaña admite')) {
           console.log(`[handler] DISPONIBILIDAD bloqueada (error): ${dispBlock.substring(0, 80)}...`);
-          // Guardamos el error en el estado para el próximo turno
           db.setReservationState(convo.id, serializeState({ step: 'disp_error', error: dispBlock } as any));
-          // Quitamos el marker sin poner nada en la respuesta al cliente
           finalReply = finalReply.replace(extractMatch[0], '');
         } else {
-          // Es una lista real de cabañas → inyectar
-          finalReply = finalReply.replace(extractMatch[0], '\n\n' + dispBlock);
+          // Es una lista real de cabañas → guardarla para el PRÓXIMO turno, NO inyectarla ahora
+          // (Paula ya respondió confirmando fechas, el usuario debe confirmar primero)
+          console.log(`[handler] DISPONIBILIDAD generada — guardando para próximo turno`);
+          db.setReservationState(convo.id, serializeState({ step: 'disp_ready', data: dispBlock } as any));
+          finalReply = finalReply.replace(extractMatch[0], '');
         }
       } else {
         // Datos incompletos → solo quitamos el marker
@@ -745,6 +753,18 @@ export async function handleIncoming(
   }
 
   insertMessage(convo.id, 'assistant', finalReply);
+
+  // ── Guard de seguridad: NUNCA enviar texto interno al cliente ──────
+  if (IS_IGUAZU) {
+    if (finalReply.includes('DISPONIBILIDAD —') || finalReply.includes('INSTRUCCIÓN PARA PAULA')) {
+      console.error('[handler] ⚠️ TEXTO INTERNO DETECTADO en finalReply — eliminando');
+      finalReply = finalReply
+        .replace(/DISPONIBILIDAD\s*—[\s\S]*?(?=\n\n[^\n]|\n*$)/g, '')
+        .replace(/INSTRUCCIÓN PARA PAULA:[\s\S]*/g, '')
+        .trim();
+    }
+  }
+
   await provider.sendMessage(msg.from, finalReply);
   console.log(`[handler] -> Enviado a ${msg.from}`);
 
