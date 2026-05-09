@@ -14,8 +14,15 @@ export interface IntentResult {
 
 const RX_DATE_RANGE = /\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/;
 const RX_MES = /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/i;
-// Match formas: "4 personas", "4 adultos", "para 4", "somos 4", "seremos 4", "5 pax", "4 p"
-const RX_PEOPLE = /\b(\d{1,2})\s*(persona|personas|huésped|huespedes|huéspedes|adulto|adultos|pax|pessoas|guests|adults|p\b)|\b(?:somos|seremos|para|son|sou)\s+(\d{1,2})\b/i;
+// Match formas: "4 personas", "4 adultos", "para 4", "somos 4", "5 pax", "4 p"
+// También formato coloquial: "3, dos adultos y un niño" → captura el 3 inicial
+const RX_PEOPLE = /\b(\d{1,2})\s*(persona|personas|huésped|huespedes|huéspedes|adulto|adultos|pax|pessoas|guests|adults|p\b|p\s)|\b(?:somos|seremos|para|son|sou|ser[ií]an)\s+(\d{1,2})\b|\b(?:un|una|uno)\s+(?:solo|sola|adulto|persona|pasajero)\b|\b(\d{1,2})\s*,\s*(?:dos|tres|cuatro|cinco|adultos|niños|niñas|personas)\b|\b(?:dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+(?:adultos|personas|pasajeros|hu[eé]spedes|pax)\b/i;
+
+const NUM_WORDS: Record<string, number> = {
+  un: 1, uno: 1, una: 1,
+  dos: 2, tres: 3, cuatro: 4, cinco: 5,
+  seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10,
+};
 const RX_AVAIL = /\b(disponib|reserva|alojamiento|cabaña|cabana|fecha|noches?|del\s+\d+\s+al\s+\d+|ten[eé]s|tienen|ten[eé]s\s+(?:lugar|algo|opciones|disponible|cabañas|cabanas|alojamiento|habitacion)|qu[eé]\s+(?:tienen|ten[eé]s|hay)\s+(?:disponible|para|lugar|cabañas))\b/i;
 
 // Patrones que implican 1 persona
@@ -45,14 +52,22 @@ export function detectIntent(text: string, hasMediaImage: boolean): IntentResult
 export function extractPeople(text: string): number | null {
   const t = text.toLowerCase();
 
-  // Explícito: "2 personas", "somos 3", "para 4", etc.
+  // Explícito: "2 personas", "somos 3", "para 4", "4, dos adultos...", "tres personas", etc.
   const m = text.match(RX_PEOPLE);
   if (m) {
-    const numStr = m[1] ?? m[3];
+    // Grupo 1 o 3 o 4: dígitos capturados
+    const numStr = m[1] ?? m[3] ?? m[4];
     if (numStr) {
       const n = parseInt(numStr, 10);
       if (!Number.isNaN(n) && n >= 1 && n <= 50) return n;
     }
+  }
+
+  // Palabras numéricas: "tres adultos", "cinco personas"
+  const wordMatch = t.match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\s+(?:adultos|personas|pasajeros|hu[eé]spedes|pax)\b/i);
+  if (wordMatch) {
+    const n = NUM_WORDS[wordMatch[1]];
+    if (n) return n;
   }
 
   // Implícito: familia
