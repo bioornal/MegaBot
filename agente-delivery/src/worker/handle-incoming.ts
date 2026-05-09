@@ -10,7 +10,7 @@ import { randomDelayMs, sleep, humanDelayMs } from '../lib/delay';
 import { getCart, clearCart, calculateTotal, addToCart, removeFromCart, updateItemQty, parseCartFromLLMReply, applyUserCartCorrections, canonicalName, setOrderType, generateTotalReply, syncPrices, arePricesLoaded, type Cart } from '../lib/cart';
 import type { WhatsAppProvider, IncomingMessage } from '../providers/types';
 import { getTenantById } from '../tenants.config';
-import { detectIntent, extractPeople, extractDateRange } from '../lib/intent-iguazufalls';
+import { detectIntent } from '../lib/intent-iguazufalls';
 import { findCabanasByCapacity, fetchCabanas, getCabanaByName } from '../lib/catalog';
 import { checkAvailability, createReservationEvent, updateReservationEvent } from '../lib/calendar-gcal';
 import { getSeason } from '../lib/season';
@@ -179,82 +179,45 @@ async function buildIguazufallsExtras(
     return blocks.join('\n\n');
   }
 
-  // === Caso DISPONIBILIDAD ===
-  if (intent.intent === 'availability' && intent.hasPeople) {
-    const personas = extractPeople(msg.text) ?? state?.personas;
-    if (personas) {
-      // Extraer fechas: prioridad state > mensaje actual > historial reciente
-      let checkIn = state?.check_in;
-      let checkOut = state?.check_out;
-      if (!checkIn || !checkOut) {
-        const here = extractDateRange(msg.text || '');
-        if (here) { checkIn = here.ci; checkOut = here.co; }
-      }
-      if (!checkIn || !checkOut) {
-        // Buscar en últimos 6 mensajes user del historial
-        try {
-          const recent = db.getRecentHistory(conversationId, 6);
-          for (let i = recent.length - 1; i >= 0; i--) {
-            if (recent[i].role !== 'user') continue;
-            const dr = extractDateRange(recent[i].content || '');
-            if (dr) { checkIn = dr.ci; checkOut = dr.co; break; }
-          }
-        } catch {}
-      }
+  return blocks.join('\n\n');
+}
 
-      // Validar que haya fechas — sin fechas NO listamos cabañas
-      if (!checkIn || !checkOut) {
-        blocks.push(
-          `DISPONIBILIDAD: SIN FECHAS — INSTRUCCIÓN: el cliente mencionó ${personas} personas pero NO dio fechas. NO listes cabañas. Respondé en su idioma pidiendo las fechas de entrada y salida. Sé breve.`
-        );
-        return blocks.join('\n\n');
-      }
-
-      // Validar fechas pasadas
-      if (checkIn && checkOut) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const ciDate = new Date(checkIn + 'T12:00:00-03:00');
-        if (ciDate < today) {
-          blocks.push(
-            `DISPONIBILIDAD — INSTRUCCIÓN: las fechas que pidió el cliente (${checkIn} → ${checkOut}) ya pasaron (hoy es ${today.toISOString().slice(0, 10)}). Decile en su idioma que no podemos reservar fechas pasadas y pedile que indique fechas futuras. NO listes cabañas ni precios. NO emitas el marker [CREAR_RESERVA].`
-          );
-          return blocks.join('\n\n');
-        }
-      }
-
-      const candidatas = await findCabanasByCapacity(personas, _tenant.productsTable);
-      if (candidatas.length > 0) {
-        const lines = [
-          `DISPONIBILIDAD — INSTRUCCIÓN: copiá la siguiente lista TAL CUAL en tu respuesta al cliente, en su idioma. NO digas "voy a verificar" ni "un momento" — la información ya está acá. Si una cabaña tiene "❌ ocupado" NO la ofrezcas como opción reservable; ofrecé solo las que tienen "✅".`,
-          ``,
-          `Opciones para ${personas} personas (${checkIn} → ${checkOut}):`,
-        ];
-        for (const c of candidatas) {
-          let precio = '';
-          let libre = '';
-          if (checkIn && checkOut) {
-            const season = getSeason(new Date(checkIn + 'T12:00:00-03:00'));
-            const p = season === 'alta' ? c.precio_alta : season === 'media' ? c.precio_media : c.precio_baja;
-            precio = ` — $${p.toLocaleString('es-AR')}/noche (${season})`;
-            try {
-              const free = await checkAvailability(c.calendar_id, checkIn, checkOut);
-              libre = free ? ' ✅' : ' ❌ ocupado';
-            } catch (e: any) {
-              console.error(`[handler] checkAvailability error para ${c.nombre}: ${e.message}`);
-              libre = '';
-            }
-          }
-          lines.push(`- ${c.nombre} (${c.capacidad_max}p, ${c.metros2}m²)${precio}${libre}`);
-        }
-        blocks.push(lines.join('\n'));
-      } else {
-        blocks.push(`DISPONIBILIDAD: ninguna cabaña admite ${personas} personas (máximo por unidad: 6).`);
-      }
-    }
+async function generateDisponibilidad(
+  personas: number,
+  checkIn: string,
+  checkOut: string
+): Promise<string> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const ciDate = new Date(checkIn + 'T12:00:00-03:00');
+  if (ciDate < today) {
+    return `DISPONIBILIDAD — INSTRUCCIÓN: las fechas (${checkIn} → ${checkOut}) ya pasaron. Decile al cliente en su idioma y pedile fechas futuras. NO listes cabañas.`;
   }
 
-  return blocks.join('\n\n');
+  const candidatas = await findCabanasByCapacity(personas, _tenant.productsTable);
+  if (candidatas.length === 0) {
+    return `DISPONIBILIDAD: ninguna cabaña admite ${personas} personas (máximo por unidad: 6). Derivá al asesor.`;
+  }
+
+  const lines = [
+    `DISPONIBILIDAD — INSTRUCCIÓN: copiá la siguiente lista TAL CUAL en tu respuesta al cliente, en su idioma. NO digas "voy a verificar" ni "un momento" — la información ya está acá. Si una cabaña tiene "❌ ocupado" NO la ofrezcas; ofrecé solo las que tienen "✅".`,
+    ``,
+    `Opciones para ${personas} personas (${checkIn} → ${checkOut}):`,
+  ];
+  for (const c of candidatas) {
+    const season = getSeason(new Date(checkIn + 'T12:00:00-03:00'));
+    const p = season === 'alta' ? c.precio_alta : season === 'media' ? c.precio_media : c.precio_baja;
+    const precio = ` — $${p.toLocaleString('es-AR')}/noche (${season})`;
+    let libre = '';
+    try {
+      const free = await checkAvailability(c.calendar_id, checkIn, checkOut);
+      libre = free ? ' ✅' : ' ❌ ocupado';
+    } catch (e: any) {
+      console.error(`[handler] checkAvailability error para ${c.nombre}: ${e.message}`);
+    }
+    lines.push(`- ${c.nombre} (${c.capacidad_max}p, ${c.metros2}m²)${precio}${libre}`);
+  }
+  return lines.join('\n');
 }
 
 export async function confirmReservationFromState(
@@ -557,6 +520,34 @@ export async function handleIncoming(
   console.log(`[handler] LLM reply: "${reply.substring(0, 200)}..."`);
 
   let finalReply = reply;
+
+  // === IguazuFalls: LLM extrae datos estructurados → consultamos Calendar ===
+  if (IS_IGUAZU) {
+    const extractMatch = finalReply.match(/\[EXTRAC_DATOS:\s*([^\]]+)\]/);
+    if (extractMatch) {
+      const raw = extractMatch[1];
+      const getParam = (key: string) => {
+        const m = raw.match(new RegExp(`${key}\\s*=\\s*([^\\s]+)`, 'i'));
+        return m ? m[1].trim() : null;
+      };
+      const pRaw = getParam('personas');
+      const ci = getParam('ci');
+      const co = getParam('co');
+      const personas = pRaw && pRaw !== '?' ? parseInt(pRaw, 10) : null;
+
+      if (personas && ci && co && ci !== '?' && co !== '?' &&
+          Number.isFinite(personas) && personas >= 1 &&
+          /^\d{4}-\d{2}-\d{2}$/.test(ci) && /^\d{4}-\d{2}-\d{2}$/.test(co)) {
+        console.log(`[handler] EXTRAC_DATOS: ${personas}p ${ci}→${co} — consultando disponibilidad...`);
+        const dispBlock = await generateDisponibilidad(personas, ci, co);
+        finalReply = finalReply.replace(extractMatch[0], '\n\n' + dispBlock);
+      } else {
+        // Datos incompletos → solo quitamos el marker
+        console.log(`[handler] EXTRAC_DATOS incompleto (p=${pRaw} ci=${ci} co=${co}) — eliminando marker`);
+        finalReply = finalReply.replace(extractMatch[0], '');
+      }
+    }
+  }
 
   // === Lógica de carrito: SOLO para Impasto (dataSource: insforge) ===
   if (_tenant.dataSource === 'insforge') {
