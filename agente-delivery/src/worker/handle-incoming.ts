@@ -767,6 +767,15 @@ if (dispBlock.includes('ya pasaron') || dispBlock.includes('ninguna cabaña admi
 
   // ── Guard de seguridad: NUNCA enviar texto interno al cliente ──────
   if (IS_IGUAZU) {
+    // Guard 1: Paula listó cabañas sin DISPONIBILIDAD → reemplazar
+    const listingPattern = /(?:^|\n)\s*-\s*(?:Studio|Lodge|Duplex)\s+\w+/m;
+    if (listingPattern.test(finalReply) && !finalReply.includes('DISPONIBILIDAD')) {
+      console.error('[handler] ⚠️ Paula listó cabañas SIN bloque DISPONIBILIDAD — reemplazando respuesta');
+      finalReply = 'Sí, tenemos opciones. Decime fechas de entrada y salida para revisar disponibilidad.';
+      insertMessage(convo.id, 'assistant', finalReply); // reemplazar en DB también
+    }
+
+    // Guard 2: texto interno colado
     if (finalReply.includes('DISPONIBILIDAD —') || finalReply.includes('INSTRUCCIÓN PARA PAULA')) {
       console.error('[handler] ⚠️ TEXTO INTERNO DETECTADO en finalReply — eliminando');
       finalReply = finalReply
