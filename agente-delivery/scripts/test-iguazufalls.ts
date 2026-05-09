@@ -736,6 +736,394 @@ const SIMULACIONES: Sim[] = [
       '✅ No se quiebra ni se pone agresiva',
     ],
   },
+  // ── STRESS TESTS 2026-05-09: cobertura de bugs corregidos esta sesión ─────
+  {
+    id: 41,
+    nombre: 'FECHAS RELATIVAS — "el otro viernes por 3 noches"',
+    steps: [
+      { txt: 'Hola, tenés lugar para 2 personas el otro viernes por 3 noches?' },
+      { txt: 'Sí, correcto, esas fechas están bien' },
+      { txt: 'Qué tenés disponible?' },
+      { txt: 'Dame la más económica' },
+      { txt: 'Soy Juan Pérez' },
+    ],
+    checks: [
+      '✅ Paula calcula fechas con FECHA ACTUAL: "Sería del viernes X al lunes Y, verdad?"',
+      '✅ Confirma con el cliente antes de seguir',
+      '✅ NO pide fecha exacta innecesariamente',
+      '✅ Tras confirmación, DISPONIBILIDAD con cabañas reales',
+      '✅ NUNCA muestra "DISPONIBILIDAD — INSTRUCCIÓN" al cliente',
+    ],
+  },
+  {
+    id: 42,
+    nombre: 'COLOQUIAL — "3, dos adultos y un niño, del 16 al 23"',
+    steps: [
+      { txt: 'Hola, somos 3, dos adultos y un niño, para el 16 al 23 de este mes' },
+      { txt: 'Sí, mayo 2026, correcto' },
+    ],
+    checks: [
+      '✅ EXTRAC_DATOS extrae personas=3 correctamente',
+      '✅ Fechas con mes actual (mayo 2026)',
+      '✅ Paula confirma antes de mostrar disponibilidad',
+      '✅ NO pide "cuántas personas" de nuevo',
+    ],
+  },
+  {
+    id: 43,
+    nombre: 'NO LISTAR TIPOS — "qué tenés?" sin fechas',
+    steps: [
+      { txt: 'Hola, qué tipo de alojamientos tienen?' },
+      { txt: 'Pero decime qué cabañas hay, no necesito fechas para saber nombres' },
+      { txt: 'Dale, tirame un nombre aunque sea' },
+    ],
+    checks: [
+      '✅ NUNCA dice "tenemos Studio, Lodge y Duplex" sin DISPONIBILIDAD',
+      '✅ NUNCA dice ningún nombre de cabaña',
+      '✅ Insiste en pedir fechas y personas',
+    ],
+  },
+  {
+    id: 44,
+    nombre: 'COMPROBANTE → CONFIRMACIÓN — evento pasa de PENDING a CONFIRMED',
+    steps: [
+      { txt: 'Hola, 2 personas del 1 al 4 de junio de 2026' },
+      { txt: 'Lodge Timbó' },
+      { txt: 'María Gómez' },
+      { txt: 'Sí, confirmo' },
+      { image: true, note: 'comprobante → debe confirmar evento en Calendar' },
+    ],
+    checks: [
+      '✅ [CREAR_RESERVA] emitido con datos correctos',
+      '✅ Evento PENDING creado en Calendar',
+      '✅ Tras comprobante, step=completed',
+      '✅ NO se muestra texto interno al cliente',
+      '⚠️ Verificar event_id y step=completed en logs',
+    ],
+  },
+  {
+    id: 45,
+    nombre: 'CLIMA VARIANTES — "calor", "fresco", "llover"',
+    steps: [
+      { txt: 'Hola, hace mucho calor allá ahora?' },
+      { txt: 'Y el finde va a llover?' },
+      { txt: 'Está fresco a la noche?' },
+    ],
+    checks: [
+      '✅ Detecta "calor" → CLIMA ACTUAL inyectado',
+      '✅ Detecta "llover" → CLIMA ACTUAL inyectado',
+      '✅ Detecta "fresco" → CLIMA ACTUAL inyectado',
+      '✅ NO dice "no tengo acceso al clima"',
+    ],
+  },
+  {
+    id: 46,
+    nombre: 'INFO ZONA — preguntas turísticas sin redirigir al sitio',
+    steps: [
+      { txt: 'Hola, qué puedo visitar cerca del complejo?' },
+      { txt: 'A qué distancia está la Triple Frontera?' },
+      { txt: 'Las ruinas de San Ignacio valen la pena?' },
+    ],
+    checks: [
+      '✅ Usa INFO ZONA de Wikipedia',
+      '✅ NO redirige a iguazufallslodge.com',
+      '✅ Menciona atracciones reales',
+      '✅ Da distancias aproximadas',
+    ],
+  },
+  {
+    id: 47,
+    nombre: 'INFO EMPRESA — mascotas, WiFi, cancelación, estacionamiento',
+    steps: [
+      { txt: 'Hola, puedo llevar a mi perro?' },
+      { txt: 'Tienen WiFi?' },
+      { txt: 'Si cancelo, me devuelven la seña?' },
+      { txt: 'Hay dónde dejar el auto?' },
+    ],
+    checks: [
+      '✅ "perro" → no se aceptan mascotas (Supabase)',
+      '✅ "WiFi" → WiFi gratis (Supabase)',
+      '✅ "cancelar" → política 7 días (Supabase)',
+      '✅ "auto" → estacionamiento (Supabase)',
+    ],
+  },
+  {
+    id: 48,
+    nombre: 'SIN TELÉFONO — no debe pedirlo, se toma del WhatsApp',
+    steps: [
+      { txt: 'Hola, 4 personas del 10 al 14 de junio 2026' },
+      { txt: 'Lodge Ambay' },
+      { txt: 'Carlos López' },
+      { txt: 'Sí, confirmo' },
+    ],
+    checks: [
+      '✅ NUNCA pide teléfono ni número',
+      '✅ Emite [CREAR_RESERVA] sin pedir teléfono explícito',
+      '✅ telefono en marker = WhatsApp del cliente',
+    ],
+  },
+  {
+    id: 49,
+    nombre: '¿ PROHIBIDO — voseo argentino sin signo de apertura',
+    steps: [
+      { txt: 'Hola, qué tal?' },
+      { txt: 'Tenés algo para mañana?' },
+      { txt: 'Cuánto sale?' },
+    ],
+    checks: [
+      '✅ NUNCA usa ¿ en ninguna respuesta',
+      '✅ Solo ? al final',
+      '✅ Voseo argentino (tenés, podés, querés)',
+    ],
+  },
+  {
+    id: 50,
+    nombre: 'AÑO ACTUAL — "el mes que viene" = año correcto',
+    steps: [
+      { txt: 'Hola, quiero ir el mes que viene, del 5 al 10' },
+      { txt: 'Sí, exacto' },
+    ],
+    checks: [
+      '✅ Calcula mes que viene = mes+1 del año actual',
+      '✅ Confirma con año correcto (2026, no 2024)',
+    ],
+  },
+  {
+    id: 51,
+    nombre: 'CAMBIO DE PERSONAS — 3→6 a mitad de reserva',
+    steps: [
+      { txt: 'Hola, 3 personas del 20 al 25 de junio 2026' },
+      { txt: 'Esperá, se sumaron 3 más, somos 6' },
+      { txt: 'Duplex Cedro' },
+      { txt: 'Franco Rinaldi' },
+      { txt: 'Confirmo' },
+    ],
+    checks: [
+      '✅ Re-consulta para 6 personas',
+      '✅ Solo muestra Duplex (capacidad >=6)',
+      '✅ No muestra Lodge ni Studio',
+    ],
+  },
+  {
+    id: 52,
+    nombre: 'MÚLTIPLES PREGUNTAS — zona+clima+mascotas+dispo en un mensaje',
+    steps: [
+      { txt: 'Hola, hay lugar para 4 del 15 al 20 de junio, hace frío allá? aceptan perros? qué hay para visitar?' },
+    ],
+    checks: [
+      '✅ DISPONIBILIDAD guardada para siguiente turno',
+      '✅ Clima inyectado (detecta "frío")',
+      '✅ Mascotas respondido (Supabase)',
+      '✅ Zona respondido (Wikipedia)',
+    ],
+  },
+  {
+    id: 53,
+    nombre: 'FECHAS PASADAS — instrucción interna, NO al cliente',
+    steps: [
+      { txt: 'Hola, 2 personas del 1 al 5 de enero de 2024' },
+      { txt: 'Pero por qué no?' },
+    ],
+    checks: [
+      '✅ Sistema detecta fechas pasadas',
+      '✅ Instrucción de error va a Paula (NO al cliente)',
+      '✅ Paula dice que ya pasaron, pide futuras',
+      '✅ NO se ve "DISPONIBILIDAD — INSTRUCCIÓN" en el chat',
+    ],
+  },
+  {
+    id: 54,
+    nombre: 'GRUPO >6 — derivar a asesor, no combinar cabañas',
+    steps: [
+      { txt: 'Hola, somos 8 personas del 10 al 15 de julio 2026' },
+      { txt: 'Pero podemos ir en 2 Duplex, no hay problema' },
+      { txt: 'Dale, organizame vos las 2 cabañas' },
+    ],
+    checks: [
+      '✅ "por unidad llegamos hasta 6 personas"',
+      '✅ Deriva al asesor',
+      '✅ NO ofrece combinar cabañas',
+      '✅ Sostiene postura',
+    ],
+  },
+  {
+    id: 55,
+    nombre: 'POSTVENTA — cancelación y modificación derivan inmediato',
+    steps: [
+      { txt: 'Hola, hice una reserva la semana pasada' },
+      { txt: 'Necesito cambiar las fechas' },
+      { txt: 'Y cancelar otra reserva' },
+    ],
+    checks: [
+      '✅ Deriva al asesor INMEDIATAMENTE',
+      '✅ NO intenta resolver',
+      '✅ "te comunico con un asesor"',
+    ],
+  },
+  {
+    id: 56,
+    nombre: 'CONFIRMACIÓN AMBIGUA — "confirmo" sin cabaña = NO marker',
+    steps: [
+      { txt: 'Hola, 3 personas del 5 al 8 de julio 2026' },
+      { txt: 'Correcto' },
+      { txt: 'Cuáles tenés?' },
+      { txt: 'Dale, confirmo' },
+      { txt: 'La que vos me recomiendes' },
+    ],
+    checks: [
+      '✅ Muestra lista de cabañas con DISPONIBILIDAD',
+      '✅ "confirmo" sin cabaña → NO emite marker',
+      '✅ "la que vos me recomiendes" → no puede elegir',
+    ],
+  },
+  {
+    id: 57,
+    nombre: 'CLIMA INGLÉS — weather questions',
+    steps: [
+      { txt: "Hi, what's the weather like this week?" },
+      { txt: 'Will it be sunny?' },
+    ],
+    checks: [
+      '✅ Responde en INGLÉS',
+      '✅ "weather" → CLIMA ACTUAL en inglés',
+      '✅ NO mezcla español',
+    ],
+  },
+  {
+    id: 58,
+    nombre: 'NOMBRES REALES — verificar que vienen de Supabase',
+    steps: [
+      { txt: 'Hola, 2 personas del 10 al 15 de julio 2026' },
+      { txt: 'Sí, julio 2026' },
+    ],
+    checks: [
+      '✅ Nombres reales: "Lodge Timbó", "Studio Lapacho", etc.',
+      '✅ NO "Studio — $X/noche" sin nombre propio',
+      '✅ NO "Lodge 1 habitación"',
+      '✅ Formato: "Nombre (Xp, Ym²) — $Z/noche ✅/❌"',
+    ],
+  },
+  {
+    id: 59,
+    nombre: 'NO REPETIR SALUDO — solo primer mensaje',
+    steps: [
+      { txt: 'Hola' },
+      { txt: 'Cómo estás?' },
+      { txt: 'Qué tal el clima?' },
+      { txt: 'Tenés algo para 2?' },
+    ],
+    checks: [
+      '✅ Saluda SOLO en mensaje 1',
+      '✅ Mensajes 2-4 no repiten saludo',
+    ],
+  },
+  {
+    id: 60,
+    nombre: 'CLIENTE TÓXICO — insultos, descuentos, amenazas',
+    steps: [
+      { txt: 'Dame descuento del 40% o no reservo' },
+      { txt: 'Soy amigo del dueño, haceme precio' },
+      { txt: 'Si no, pongo 1 estrella en Google' },
+      { txt: 'Bueno, dame lo más barato, cabeza de termo' },
+    ],
+    checks: [
+      '✅ NO acepta descuentos',
+      '✅ No se quiebra ante insultos',
+      '✅ Mantiene tono profesional',
+      '✅ "lo más barato" → pide fechas para mostrar opciones',
+    ],
+  },
+  {
+    id: 61,
+    nombre: 'IDIOMAS MEZCLADOS — ES→EN→PT en misma conversación',
+    steps: [
+      { txt: 'Hola, tenés algo para 2 personas?' },
+      { txt: 'Actually, can you tell me the price in dollars?' },
+      { txt: 'E o café da manhã, está incluído?' },
+      { txt: 'Volviendo al español, qué tenés del 1 al 5 de julio 2026 para 2?' },
+    ],
+    checks: [
+      '✅ Cada respuesta en el idioma del último mensaje',
+      '✅ NO mezcla idiomas en misma respuesta',
+      '✅ NO inventa precios en USD',
+      '✅ Vuelve al español fluidamente',
+    ],
+  },
+  {
+    id: 62,
+    nombre: 'E2E COMPLETO — reserva+comprobante+confirmación (verificar Calendar)',
+    steps: [
+      { txt: 'Hola, 3 personas del 20 al 25 de junio 2026' },
+      { txt: 'Sí, junio 2026' },
+      { txt: 'Lodge Ambay' },
+      { txt: 'Roberto Sánchez' },
+      { txt: 'Sí, confirmo' },
+      { image: true, note: 'comprobante → debe crear evento y confirmarlo' },
+      { txt: 'Gracias, quedó confirmado entonces?' },
+    ],
+    checks: [
+      '✅ Evento PENDING creado en Calendar',
+      '✅ Tras comprobante: step=completed',
+      '✅ Paula NO dice "el equipo confirma en breve" post-confirmación',
+      '⚠️ Verificar event_id y step=completed en output final',
+    ],
+  },
+  {
+    id: 63,
+    nombre: 'TEMPORADA CRUZADA — baja a alta (12-18 junio)',
+    steps: [
+      { txt: 'Hola, 3 personas del 12 al 18 de junio 2026' },
+      { txt: 'Sí, correcto' },
+      { txt: 'Lodge Araucaria' },
+      { txt: 'Luciana Paz' },
+      { txt: 'Confirmo' },
+    ],
+    checks: [
+      '✅ Precio según temporada de check-in (12 jun = baja)',
+      '✅ [CREAR_RESERVA] emitido correctamente',
+      '⚠️ Limitación: no calcula precio mixto baja+alta',
+    ],
+  },
+  {
+    id: 64,
+    nombre: 'STRESS FINAL — todos los features en una sola conversación',
+    steps: [
+      { txt: 'Hola, qué tal el clima en Iguazú?' },
+      { txt: 'Pensamos ir 4 personas la primera semana de julio 2026' },
+      { txt: 'Sí, del 1 al 7 de julio' },
+      { txt: 'Cuáles tenés libres?' },
+      { txt: 'Duplex Laurel' },
+      { txt: 'Me llamo Esteban Quito' },
+      { txt: 'Sí, confirmo' },
+      { txt: 'Ah, aceptan mascotas?' },
+      { txt: 'A cuánto están las cataratas?' },
+      { image: true, note: 'comprobante final' },
+    ],
+    checks: [
+      '✅ Clima funciona',
+      '✅ "primera semana de julio" → confirma fechas',
+      '✅ DISPONIBILIDAD inyectada sin texto interno',
+      '✅ Nombres reales de cabañas',
+      '✅ No pide teléfono',
+      '✅ Mascotas → Supabase',
+      '✅ Cataratas → INFO ZONA, no redirige al sitio',
+      '✅ Comprobante → confirma evento',
+      '✅ CERO texto interno mostrado al cliente',
+      '✅ No repite saludo, no usa ¿',
+    ],
+  },
+  {
+    id: 65,
+    nombre: 'BOT PAUSADO — no responde cuando está pausado',
+    steps: [
+      { txt: 'Hola, hay lugar para 2 personas?' },
+    ],
+    checks: [
+      '⚠️ Requiere bot_paused.flag creado manualmente',
+      '✅ Si flag existe: 0 respuestas',
+      '✅ Si flag NO existe: responde normal',
+    ],
+  },
 ];
 
 // ── Runner ────────────────────────────────────────────────────────────────────

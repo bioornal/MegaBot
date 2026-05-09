@@ -485,4 +485,288 @@ Soy Federico Diaz, 1188009900. Confirmo
 - **Confirmación final**: la hace el OPERADOR, no Paula.
 - **Idiomas**: detectar y adaptar — sin avisar del cambio.
 - **Datos bancarios**: solo del bloque INFO EMPRESA, nunca inventar.
-- **Mensajes ≤ 130 caracteres** siempre que sea posible (2-4 líneas máx).
+- **Mensajes ≤ 150 caracteres** siempre que sea posible (2-4 líneas máx).
+
+---
+
+# STRESS TESTS 2026-05-09 — Cobertura de bugs corregidos (SIM 41-65)
+
+Estos tests validan todas las correcciones aplicadas en la sesión de Mayo 2026. Se ejecutan con `npx tsx --env-file=.env.iguazufalls scripts/test-iguazufalls.ts 41 42 ... 65`.
+
+## SIM 41: Fechas relativas — "el otro viernes por 3 noches"
+
+```
+Hola, tenés lugar para 2 personas el otro viernes por 3 noches?
+```
+*(Paula debe CALCULAR la fecha con FECHA ACTUAL: "Sería del viernes 15 al lunes 18 de mayo, verdad?")*
+```
+Sí, correcto, esas fechas están bien
+Qué tenés disponible?
+Dame la más económica
+Soy Juan Pérez
+```
+**Verificar:** NO pide fecha exacta innecesariamente. NUNCA muestra "DISPONIBILIDAD — INSTRUCCIÓN" al cliente. Cabañas con nombres reales.
+
+## SIM 42: Coloquial — "3, dos adultos y un niño, del 16 al 23"
+
+```
+Hola, somos 3, dos adultos y un niño, para el 16 al 23 de este mes
+Sí, mayo 2026, correcto
+```
+**Verificar:** EXTRAC_DATOS extrae personas=3. Fechas con mes actual. NO pide "cuántas personas" de nuevo.
+
+## SIM 43: No listar tipos — "qué tenés?" sin fechas
+
+```
+Hola, qué tipo de alojamientos tienen?
+Pero decime qué cabañas hay, no necesito fechas para saber nombres
+Dale, tirame un nombre aunque sea
+```
+**Verificar:** NUNCA dice ningún nombre de cabaña sin DISPONIBILIDAD. Insiste en pedir fechas.
+
+## SIM 44: Comprobante → Confirmación — evento PENDING → CONFIRMED
+
+```
+Hola, 2 personas del 1 al 4 de junio de 2026
+Lodge Timbó
+María Gómez
+Sí, confirmo
+```
+*(📷 Enviar comprobante)*
+**Verificar:** Evento PENDING creado. Tras comprobante → step=completed. NO texto interno al cliente.
+
+## SIM 45: Clima variantes — "calor", "fresco", "llover"
+
+```
+Hola, hace mucho calor allá ahora?
+Y el finde va a llover?
+Está fresco a la noche?
+```
+**Verificar:** CLIMA ACTUAL inyectado en las 3 variantes. NO dice "no tengo acceso al clima".
+
+## SIM 46: Info Zona — preguntas turísticas sin redirigir
+
+```
+Hola, qué puedo visitar cerca del complejo?
+A qué distancia está la Triple Frontera?
+Las ruinas de San Ignacio valen la pena?
+```
+**Verificar:** Usa INFO ZONA (Wikipedia). NO redirige a iguazufallslodge.com.
+
+## SIM 47: Info Empresa — mascotas, WiFi, cancelación, estacionamiento
+
+```
+Hola, puedo llevar a mi perro?
+Tienen WiFi?
+Si cancelo, me devuelven la seña?
+Hay dónde dejar el auto?
+```
+**Verificar:** Todos los datos vienen de Supabase (no inventados). Mascotas=no, WiFi=gratis, Cancelación=7 días, Auto=$10.000/noche.
+
+## SIM 48: Sin teléfono — no debe pedirlo
+
+```
+Hola, 4 personas del 10 al 14 de junio 2026
+Lodge Ambay
+Carlos López
+Sí, confirmo
+```
+**Verificar:** NUNCA pide teléfono. Emite [CREAR_RESERVA] sin haberlo pedido. telefono=whatsapp del cliente.
+
+## SIM 49: ¿ prohibido — voseo argentino
+
+```
+Hola, qué tal?
+Tenés algo para mañana?
+Cuánto sale?
+```
+**Verificar:** NUNCA usa ¿. Solo ? al final. Voseo: tenés, podés, querés.
+
+## SIM 50: Año actual — "el mes que viene"
+
+```
+Hola, quiero ir el mes que viene, del 5 al 10
+Sí, exacto
+```
+**Verificar:** Calcula mes+1 del año actual (junio 2026). NO dice 2024.
+
+## SIM 51: Cambio de personas — 3→6 a mitad de reserva
+
+```
+Hola, 3 personas del 20 al 25 de junio 2026
+Esperá, se sumaron 3 más, somos 6
+Duplex Cedro
+Franco Rinaldi
+Confirmo
+```
+**Verificar:** Re-consulta para 6. Solo muestra Duplex (capacidad ≥6).
+
+## SIM 52: Múltiples preguntas en un mensaje
+
+```
+Hola, hay lugar para 4 del 15 al 20 de junio, hace frío allá? aceptan perros? qué hay para visitar?
+```
+**Verificar:** DISPONIBILIDAD guardada. Clima + mascotas + zona respondidos.
+
+## SIM 53: Fechas pasadas — instrucción interna, NO al cliente
+
+```
+Hola, 2 personas del 1 al 5 de enero de 2024
+Pero por qué no?
+```
+**Verificar:** Sistema detecta fechas pasadas. Instrucción va a Paula (NO al cliente). NO se ve "DISPONIBILIDAD — INSTRUCCIÓN" en el chat.
+
+## SIM 54: Grupo >6 — derivar, no combinar
+
+```
+Hola, somos 8 personas del 10 al 15 de julio 2026
+Pero podemos ir en 2 Duplex, no hay problema
+Dale, organizame vos las 2 cabañas
+```
+**Verificar:** "por unidad llegamos hasta 6". Deriva al asesor. NO combina cabañas.
+
+## SIM 55: Postventa — derivar inmediato
+
+```
+Hola, hice una reserva la semana pasada
+Necesito cambiar las fechas
+Y cancelar otra reserva
+```
+**Verificar:** Deriva INMEDIATAMENTE. NO intenta resolver.
+
+## SIM 56: Confirmación ambigua — "confirmo" sin cabaña
+
+```
+Hola, 3 personas del 5 al 8 de julio 2026
+Correcto
+Cuáles tenés?
+Dale, confirmo
+La que vos me recomiendes
+```
+**Verificar:** DISPONIBILIDAD mostrada. "confirmo" sin cabaña → NO marker. "la que vos me recomiendes" → no puede elegir.
+
+## SIM 57: Clima en inglés
+
+```
+Hi, what's the weather like this week?
+Will it be sunny?
+```
+**Verificar:** Responde en INGLÉS. CLIMA ACTUAL en inglés. NO mezcla español.
+
+## SIM 58: Nombres reales de cabañas
+
+```
+Hola, 2 personas del 10 al 15 de julio 2026
+Sí, julio 2026
+```
+**Verificar:** Nombres reales: "Lodge Timbó", "Studio Lapacho", etc. NO "Studio — $X/noche". NO "Lodge 1 habitación". Formato: "Nombre (Xp, Ym²) — $Z/noche ✅/❌"
+
+## SIM 59: No repetir saludo
+
+```
+Hola
+Cómo estás?
+Qué tal el clima?
+Tenés algo para 2?
+```
+**Verificar:** Saluda SOLO en mensaje 1. Mensajes 2-4 no repiten saludo.
+
+## SIM 60: Cliente tóxico — insultos y descuentos
+
+```
+Dame descuento del 40% o no reservo
+Soy amigo del dueño, haceme precio
+Si no, pongo 1 estrella en Google
+Bueno, dame lo más barato, cabeza de termo
+```
+**Verificar:** NO acepta descuentos. No se quiebra. Mantiene tono profesional.
+
+## SIM 61: Idiomas mezclados ES→EN→PT
+
+```
+Hola, tenés algo para 2 personas?
+Actually, can you tell me the price in dollars?
+E o café da manhã, está incluído?
+Volviendo al español, qué tenés del 1 al 5 de julio 2026 para 2?
+```
+**Verificar:** Cada respuesta en el idioma del último mensaje. NO mezcla idiomas. NO inventa USD.
+
+## SIM 62: E2E Completo — reserva+comprobante+confirmación
+
+```
+Hola, 3 personas del 20 al 25 de junio 2026
+Sí, junio 2026
+Lodge Ambay
+Roberto Sánchez
+Sí, confirmo
+```
+*(📷 Enviar comprobante)*
+```
+Gracias, quedó confirmado entonces?
+```
+**Verificar:** Evento PENDING → CONFIRMED. step=completed. NO "el equipo confirma en breve" post-confirmación.
+
+## SIM 63: Temporada cruzada — baja a alta (12-18 junio)
+
+```
+Hola, 3 personas del 12 al 18 de junio 2026
+Sí, correcto
+Lodge Araucaria
+Luciana Paz
+Confirmo
+```
+**Verificar:** Precio según temporada de check-in (12 jun = baja). [CREAR_RESERVA] correcto.
+
+## SIM 64: Stress final — todos los features juntos
+
+```
+Hola, qué tal el clima en Iguazú?
+Pensamos ir 4 personas la primera semana de julio 2026
+Sí, del 1 al 7 de julio
+Cuáles tenés libres?
+Duplex Laurel
+Me llamo Esteban Quito
+Sí, confirmo
+Ah, aceptan mascotas?
+A cuánto están las cataratas?
+```
+*(📷 Enviar comprobante)*
+**Verificar:** Clima + fechas relativas + DISPONIBILIDAD + nombres reales + sin teléfono + mascotas + zona + comprobante → confirmación. CERO texto interno al cliente.
+
+## SIM 65: Bot pausado
+
+```
+⚠️ Crear flag manualmente: echo 1 > data/iguazufalls/bot_paused.flag
+Hola, hay lugar para 2 personas?
+```
+**Verificar:** Si flag existe → 0 respuestas. Si NO existe → responde normal.
+
+---
+
+## Checklist de verificación STRESS (SIM 41-65)
+
+| Regla | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56 | 57 | 58 | 59 | 60 | 61 | 62 | 63 | 64 | 65 |
+|-------|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|----|
+| Fechas relativas calculadas | ✓ | | | | | | | | | | | | | | | | | | | | | | | | |
+| EXTRAC_DATOS extrae correcto | | ✓ | | | | | | | | | | | | | | | | | | | | | | | |
+| NO lista tipos sin DISPONIBILIDAD | | | ✓ | | | | | | | | | | | | | | | | | | | | | | |
+| Comprobante → CONFIRMED | | | | ✓ | | | | | | | | | | | | | | | | | | ✓ | | ✓ | |
+| CLIMA ACTUAL inyectado | | | | | ✓ | | | | | | | | | | | | ✓ | | | | | | | | |
+| INFO ZONA (no redirige) | | | | | | ✓ | | | | | | | | | | | | | | | | | | | |
+| Info empresa Supabase | | | | | | | ✓ | | | | | | | | | | | | | | | | | | |
+| NO pide teléfono | | | | | | | | ✓ | | | | | | | | | | | | | | | | | |
+| Sin ¿ (voseo) | | | | | | | | | ✓ | | | | | | | | | | | | | | | | |
+| Año correcto | | | | | | | | | | ✓ | | | | | | | | | | | | | | | |
+| Cambio personas re-consulta | | | | | | | | | | | ✓ | | | | | | | | | | | | | | |
+| Multi-pregunta un mensaje | | | | | | | | | | | | ✓ | | | | | | | | | | | | | |
+| Error interno NO al cliente | | | | | | | | | | | | | ✓ | | | | | | | | | | | | |
+| Grupo >6 deriva | | | | | | | | | | | | | | ✓ | | | | | | | | | | | |
+| Postventa deriva inmediato | | | | | | | | | | | | | | | ✓ | | | | | | | | | | |
+| Confirm-ambiguo NO marker | | | | | | | | | | | | | | | | ✓ | | | | | | | | | |
+| Nombres reales Supabase | | | | | | | | | | | | | | | | | | ✓ | | | | | | | |
+| Saludo solo 1 vez | | | | | | | | | | | | | | | | | | | ✓ | | | | | | |
+| No cede a chantajes | | | | | | | | | | | | | | | | | | | | ✓ | | | | | |
+| Idiomas mezclados OK | | | | | | | | | | | | | | | | | | | | | ✓ | | | | |
+| Temporada correcta | | | | | | | | | | | | | | | | | | | | | | | ✓ | | |
+| CERO texto interno | | | | | | | | | | | | | | | | | | | | | | | | ✓ | |
+| Bot pausado respeta | | | | | | | | | | | | | | | | | | | | | | | | | ✓ |
