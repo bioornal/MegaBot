@@ -478,9 +478,12 @@ export async function handleIncoming(
   console.log(`[handler] companyInfoContext length: ${companyInfoContext.length}`);
 
   console.log(`[handler] Obteniendo catalogContext (tabla: ${_tenant.productsTable}) para: "${msg.text}"`);
-  const catalogContext = _tenant.dataSource === 'insforge'
-    ? await getMenuContextFromInsforge(msg.text)
-    : await getCatalogContext(msg.text, _tenant.productsTable);
+  // IguazuFalls: NO inyectar catálogo — las cabañas vienen del bloque DISPONIBILIDAD
+  const catalogContext = IS_IGUAZU
+    ? ''
+    : _tenant.dataSource === 'insforge'
+      ? await getMenuContextFromInsforge(msg.text)
+      : await getCatalogContext(msg.text, _tenant.productsTable);
   console.log(`[handler] catalogContext length: ${catalogContext.length}`);
 
   // Sync prices from Insforge into cart module (solo para Impasto)
