@@ -18,7 +18,7 @@ import { parseState, serializeState, type ReservationState } from '../lib/reserv
 import { verifyPaymentReceipt } from '../lib/verify-payment';
 
 const AI_REPLY_DELAY_MIN_MS = 3_000;
-const AI_REPLY_DELAY_MAX_MS = 20_000;
+const AI_REPLY_DELAY_MAX_MS = 25_000;
 const AI_REPLY_DELAY_ENABLED = process.env.AI_REPLY_DELAY !== 'false';
 
 function loadTenantOrThrow() {

@@ -13,16 +13,20 @@ function gaussianRandom(): number {
   return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 }
 
-export function humanDelayMs(charCount: number, minMs = 1000, maxMs = 22000): number {
+export function humanDelayMs(charCount: number, minMs = 2000, maxMs = 25000): number {
   let base: number;
   if (charCount < 100) {
-    base = randomDelayMs(1000, 4000);
+    // "Tu nombre." → 2-6s (estaba 1-4s)
+    base = randomDelayMs(2_000, 6_000);
   } else if (charCount < 400) {
-    base = randomDelayMs(4000, 10000);
+    // respuesta normal → 6-14s (estaba 4-10s)
+    base = randomDelayMs(6_000, 14_000);
   } else if (charCount < 800) {
-    base = randomDelayMs(8000, 16000);
+    // receipt → 12-20s (estaba 8-16s)
+    base = randomDelayMs(12_000, 20_000);
   } else {
-    base = randomDelayMs(14000, maxMs);
+    // receipt largo → 18-25s (estaba 14-22s)
+    base = randomDelayMs(18_000, maxMs);
   }
 
   const jitter = gaussianRandom() * 0.2;
