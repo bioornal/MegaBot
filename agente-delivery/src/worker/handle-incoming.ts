@@ -21,6 +21,12 @@ const AI_REPLY_DELAY_MIN_MS = 3_000;
 const AI_REPLY_DELAY_MAX_MS = 25_000;
 const AI_REPLY_DELAY_ENABLED = process.env.AI_REPLY_DELAY !== 'false';
 
+// ── Anti-ban: variación de patrones humanos ─────────────────────────
+const PRE_READ_DELAY_MS = [500, 3_000];     // delay antes de marcar como leído
+const TYPING_BURST_CHANCE = 0.2;            // 20% chance de ráfaga de "reescritura"
+const SKIP_TYPING_CHANCE = 0.15;            // 15% chance de no mandar typing (respuesta corta)
+const KEEP_TYPING_CHANCE = 0.3;             // 30% mantener composing unos segundos extra
+
 function loadTenantOrThrow() {
   const id = process.env.TENANT_ID;
   if (!id) {
@@ -407,8 +413,16 @@ export async function handleIncoming(
   console.log(`[handler] Llamando LLM con ${llmMessages.length} mensajes...`);
   const start = Date.now();
 
+  // ── Anti-ban: simular pausa de lectura antes de reaccionar ──────
+  const preReadMs = randomDelayMs(PRE_READ_DELAY_MS[0], PRE_READ_DELAY_MS[1]);
+  await sleep(preReadMs);
   await provider.markAsRead(msg);
-  await provider.sendTyping(msg.from);
+
+  // ── Anti-ban: no siempre mandar typing (15% mensajes cortos sin él) ──
+  const skipTyping = msg.text.length < 40 && Math.random() < SKIP_TYPING_CHANCE;
+  if (!skipTyping) {
+    await provider.sendTyping(msg.from);
+  }
 
   console.log(`[handler] Obteniendo companyInfoContext (tabla: ${_tenant.companyInfoTable})...`);
   const companyInfoContext = _tenant.dataSource === 'insforge'
@@ -596,7 +610,26 @@ export async function handleIncoming(
     }
   }
 
-  await provider.stopTyping(msg.from);
+  // ── Anti-ban: variar patrón de typing ──────────────────────────
+  const wasTyping = !skipTyping; // solo manipular si mandamos typing
+  if (wasTyping) {
+    // 30%: mantener composing unos segundos extra (simula relectura)
+    if (Math.random() < KEEP_TYPING_CHANCE) {
+      const extraComposingMs = randomDelayMs(1_500, 4_000);
+      await sleep(extraComposingMs);
+    }
+    await provider.stopTyping(msg.from);
+
+    // 20%: ráfaga de "reescritura" después de una pausa
+    if (Math.random() < TYPING_BURST_CHANCE) {
+      const pauseMs = randomDelayMs(1_000, 3_000);
+      await sleep(pauseMs);
+      await provider.sendTyping(msg.from);
+      const burstMs = randomDelayMs(800, 2_000);
+      await sleep(burstMs);
+      await provider.stopTyping(msg.from);
+    }
+  }
 
   if (AI_REPLY_DELAY_ENABLED) {
     const delayMs = humanDelayMs(finalReply.length, AI_REPLY_DELAY_MIN_MS, AI_REPLY_DELAY_MAX_MS);
