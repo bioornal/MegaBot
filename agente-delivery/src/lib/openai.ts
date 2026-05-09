@@ -71,7 +71,9 @@ export async function transcribeAudioBuffer(
   const mainKey = process.env.OPENAI_API_KEY || '';
 
   console.log('[openai:audio] isDeepSeek:', isDeepSeek,
+    '| fallbackKey.len:', fallbackKey.length,
     '| fallbackKey:', fallbackKey.slice(0, 15) + '...' + fallbackKey.slice(-4),
+    '| mainKey.len:', mainKey.length,
     '| mainKey:', mainKey.slice(0, 15) + '...' + mainKey.slice(-4));
 
   // Crear siempre cliente nuevo apuntando a OpenAI real, nunca cacheado
