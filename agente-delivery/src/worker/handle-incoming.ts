@@ -16,6 +16,7 @@ import { checkAvailability, createReservationEvent, updateReservationEvent } fro
 import { getSeason } from '../lib/season';
 import { parseState, serializeState, type ReservationState } from '../lib/reservation-state';
 import { verifyPaymentReceipt } from '../lib/verify-payment';
+import { appendReservationRow } from '../lib/sheets-client';
 import { getIguazuWikiContext } from '../lib/iguazu-context';
 import { getWeatherContext } from '../lib/weather';
 
@@ -212,6 +213,22 @@ async function buildIguazufallsExtras(
           }
         }
         if (calendarUpdated) {
+          // Guardar en Google Sheets para remarketing y control del operador
+          const noches = Math.round((new Date(state.check_out! + 'T12:00:00-03:00').getTime() - new Date(state.check_in! + 'T12:00:00-03:00').getTime()) / (24 * 60 * 60 * 1000));
+          appendReservationRow({
+            fechaConfirmacion: new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),
+            nombre: state.huesped_nombre ?? 'Huésped',
+            telefono: state.huesped_telefono ?? '',
+            cabana: state.cabana ?? '',
+            checkIn: state.check_in ?? '',
+            checkOut: state.check_out ?? '',
+            personas: state.personas ?? 1,
+            total: state.total ?? 0,
+            sena: state.sena ?? 0,
+            noches: noches > 0 ? noches : 1,
+            estado: 'CONFIRMADO',
+          });
+
           blocks.push(`COMPROBANTE: OK\nDetalle: ${detail}\nLA RESERVA YA ESTÁ CONFIRMADA. El evento en el calendario pasó de PENDIENTE a CONFIRMADO. Decile al cliente EXACTAMENTE: "Comprobante recibido y verificado. ¡Reserva confirmada! Cualquier consulta estamos a disposición." NO digas "en breve" ni "el equipo va a confirmar" — ya está confirmado.`);
         } else {
           // Verificación OK pero falló la actualización del Calendar — no mentir al cliente
@@ -790,6 +807,21 @@ export async function handleIncoming(
           sena,
         });
         console.log(`[handler] ✅ Reserva auto-creada: ${cabana.nombre} ${ci}→${co} ${personas}p — eventId=${r.event_id}`);
+
+        // Guardar en Google Sheets como PENDIENTE
+        appendReservationRow({
+          fechaConfirmacion: new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),
+          nombre: nombre ?? 'Huésped',
+          telefono: telefono,
+          cabana: cabana.nombre,
+          checkIn: ci,
+          checkOut: co,
+          personas: personas,
+          total: total,
+          sena: sena,
+          noches: noches > 0 ? noches : 1,
+          estado: 'PENDIENTE',
+        });
 
         // Reemplazar el marker con confirmación natural en la respuesta
         const confirmText = `Reserva pre-cargada en el calendario. Total: $${total.toLocaleString('es-AR')} | Seña 50%: $${sena.toLocaleString('es-AR')}. Esperamos el comprobante para confirmar.`;
