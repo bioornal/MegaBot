@@ -1124,6 +1124,82 @@ const SIMULACIONES: Sim[] = [
       '✅ Si flag NO existe: responde normal',
     ],
   },
+  // ── NUEVAS SIMULACIONES 2026-05-09: validación de fixes recientes ────────────
+  {
+    id: 66,
+    nombre: 'FIX: Fechas exactas en primer mensaje → NO alucinar lista (bug reportado)',
+    steps: [
+      { txt: 'Hola, somos 4 personas del 15 al 18 de febrero de 2027' },
+      { txt: 'Cuál me recomendás?' },
+    ],
+    checks: [
+      '✅ Primer turno: Paula NO lista cabañas inventadas',
+      '✅ Primer turno: Paula dice "reviso opciones disponibles" o similar',
+      '✅ Segundo turno: se inyecta DISPONIBILIDAD real con precios correctos',
+      '✅ NO se ve "Decime fechas de entrada y salida" cuando el cliente YA las dio',
+      '✅ Lista del segundo turno coincide con datos de Google Calendar + Supabase',
+    ],
+  },
+  {
+    id: 67,
+    nombre: 'FIX: Disponibilidad se muestra SOLO al móvil y al dash (no solo al dash)',
+    steps: [
+      { txt: 'Hola, 2 personas del 20 al 23 de junio 2026' },
+      { txt: 'Sí, correcto' },
+      { txt: 'Cuáles tenés libres?' },
+    ],
+    checks: [
+      '✅ El mensaje con la lista de cabañas llega al cliente (no es reemplazado por guard)',
+      '✅ NO hay doble mensaje en el dashboard (solo una entrada por turno)',
+      '✅ Los precios mostrados son los reales del bloque DISPONIBILIDAD',
+    ],
+  },
+  {
+    id: 68,
+    nombre: 'FIX: Guard no bloquea cuando hay DISPONIBILIDAD real inyectada',
+    steps: [
+      { txt: 'Hola, 3 personas del 10 al 15 de julio 2026' },
+      { txt: 'Perfecto' },
+      { txt: 'Dame el Lodge Palo Rosa' },
+      { txt: 'Soy Marta Gómez' },
+      { txt: 'Sí, confirmo' },
+    ],
+    checks: [
+      '✅ Lista de cabañas con precios se muestra correctamente',
+      '✅ NO se reemplaza por "Sí, tenemos opciones. Decime fechas..."',
+      '✅ [CREAR_RESERVA] se emite correctamente al confirmar',
+      '✅ Se crea evento PENDING en Calendar',
+    ],
+  },
+  {
+    id: 69,
+    nombre: 'FIX: Fechas pasadas manejadas en el mismo turno (sin confundir al cliente)',
+    steps: [
+      { txt: 'Hola, 2 personas del 1 al 5 de enero de 2024' },
+      { txt: 'Ah, no sabía. Y del 1 al 5 de enero de 2027?' },
+    ],
+    checks: [
+      '✅ Primer turno: Paula NO dice "No veo opciones en mi sistema ahora" (mensaje confuso)',
+      '✅ Primer turno: Paula dice claramente que las fechas ya pasaron',
+      '✅ Segundo turno: se consulta disponibilidad para fechas futuras correctamente',
+    ],
+  },
+  {
+    id: 70,
+    nombre: 'FIX: Prompt reducido no rompe funcionalidad (validación de reglas críticas)',
+    steps: [
+      { txt: 'Hola, somos 6 personas del 12 al 18 de agosto 2026' },
+      { txt: 'Dale, queremos el Duplex Cedro' },
+      { txt: 'Soy Leo Messi, 1133224455' },
+      { txt: 'Sí, confirmo' },
+    ],
+    checks: [
+      '✅ Detecta 6 personas → lista solo Duplex (capacidad >= 6)',
+      '✅ [CREAR_RESERVA] con cabana="Duplex Cedro"',
+      '✅ Formato de fechas YYYY-MM-DD correcto',
+      '✅ NUNCA inventa precios',
+    ],
+  },
 ];
 
 // ── Runner ────────────────────────────────────────────────────────────────────

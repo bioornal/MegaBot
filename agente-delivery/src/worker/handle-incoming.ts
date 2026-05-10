@@ -100,14 +100,15 @@ console.log(`[handler] Bot: ${isBotPaused() ? 'PAUSADO' : 'ACTIVO'}`);
 async function buildIguazufallsExtras(
   msg: IncomingMessage,
   conversationId: number
-): Promise<string> {
+): Promise<{ text: string; hadDisponibilidad: boolean }> {
   // Cargar estado de reserva del SQLite (vacío si nunca se inició una reserva).
   const stateJson = db.getReservationState(conversationId);
   const state: ReservationState | null = parseState(stateJson);
   const intent = detectIntent(msg.text ?? '', !!msg.mediaUrl);
   const blocks: string[] = [];
+  let hadDisponibilidad = false;
 
-// Si el turno anterior hubo un error de disponibilidad (fechas pasadas, etc.),
+  // Si el turno anterior hubo un error de disponibilidad (fechas pasadas, etc.),
   // inyectamos la instrucción para Paula en este turno
   if (state && (state as any).step === 'disp_error' && (state as any).error) {
     console.log(`[handler] Inyectando error previo de DISPONIBILIDAD: ${(state as any).error.substring(0, 60)}...`);
@@ -120,6 +121,7 @@ async function buildIguazufallsExtras(
   if (state && (state as any).step === 'disp_ready' && (state as any).data) {
     console.log(`[handler] Inyectando DISPONIBILIDAD lista para mostrar`);
     blocks.push((state as any).data);
+    hadDisponibilidad = true;
     db.setReservationState(conversationId, '');
   }
 
@@ -148,7 +150,7 @@ async function buildIguazufallsExtras(
       'Respondé EXACTAMENTE: "Comprobante recibido y verificado. ¡Reserva confirmada! Cualquier consulta estamos a disposición." ' +
       'NO digas "en breve" ni "el equipo confirma" — ya está confirmado.'
     );
-    return blocks.join('\n\n');
+    return { text: blocks.join('\n\n'), hadDisponibilidad };
   }
 
   // === Caso COMPROBANTE ===
@@ -203,10 +205,10 @@ async function buildIguazufallsExtras(
     }
 
     blocks.push(`COMPROBANTE: ${tag}\nDetalle: ${detail}\nLA RESERVA YA ESTÁ CONFIRMADA. El evento en el calendario pasó de PENDIENTE a CONFIRMADO. Decile al cliente EXACTAMENTE: "Comprobante recibido y verificado. ¡Reserva confirmada! Cualquier consulta estamos a disposición." NO digas "en breve" ni "el equipo va a confirmar" — ya está confirmado.`);
-    return blocks.join('\n\n');
+    return { text: blocks.join('\n\n'), hadDisponibilidad };
   }
 
-  return blocks.join('\n\n');
+  return { text: blocks.join('\n\n'), hadDisponibilidad };
 }
 
 async function generateDisponibilidad(
@@ -227,7 +229,7 @@ async function generateDisponibilidad(
   }
 
   const lines = [
-    `DISPONIBILIDAD — INSTRUCCIÓN: copiá la siguiente lista TAL CUAL en tu respuesta al cliente, en su idioma. NO digas "voy a verificar" ni "un momento" — la información ya está acá. Si una cabaña tiene "❌ ocupado" NO la ofrezcas; ofrecé solo las que tienen "✅".`,
+    `DISPONIBILIDAD — INSTRUCCIÓN: copiá la siguiente lista TAL CUAL en tu respuesta al cliente, en su idioma. NO digas "voy a verificar" ni "un momento" — la información ya está acá. Las cabañas marcadas como "ocupado" NO las ofrezcas; ofrecé solo las que NO dicen ocupado.`,
     ``,
     `Opciones para ${personas} personas (${checkIn} → ${checkOut}):`,
   ];
@@ -238,7 +240,7 @@ async function generateDisponibilidad(
     let libre = '';
     try {
       const free = await checkAvailability(c.calendar_id, checkIn, checkOut);
-      libre = free ? ' ✅' : ' ❌ ocupado';
+      libre = free ? '' : ' — ocupado';
     } catch (e: any) {
       console.error(`[handler] checkAvailability error para ${c.nombre}: ${e.message}`);
     }
@@ -496,10 +498,10 @@ export async function handleIncoming(
   }
 
   // Extras: solo IguazuFalls (DISPONIBILIDAD / COMPROBANTE / CLIMA / WIKI)
-  let extras = '';
+  let extras = { text: '', hadDisponibilidad: false };
   if (IS_IGUAZU) {
     extras = await buildIguazufallsExtras(msg, convo.id);
-    console.log(`[handler] iguazufalls extras length: ${extras.length}`);
+    console.log(`[handler] iguazufalls extras length: ${extras.text.length}, hadDisponibilidad: ${extras.hadDisponibilidad}`);
   }
 
   // IguazuFalls: fecha actual (SIEMPRE, para que Paula sepa el año/mes/día) + wiki + clima
@@ -527,7 +529,7 @@ export async function handleIncoming(
   // Si el sistema ya verificó el comprobante (bloque COMPROBANTE: presente),
   // no pasamos la imagen al LLM — la decisión ya está tomada en texto.
   // Esto también evita que un URL de imagen roto/expirado crashee el handler.
-  if (extras.includes('COMPROBANTE:')) {
+  if (extras.text.includes('COMPROBANTE:')) {
     for (const m of llmMessages) {
       if (typeof m.content !== 'string' && Array.isArray(m.content)) {
         m.content = '[comprobante recibido]';
@@ -535,7 +537,7 @@ export async function handleIncoming(
     }
   }
 
-  const fullSystemPrompt = [SYSTEM_PROMPT, companyInfoContext, catalogContext, extras]
+  const fullSystemPrompt = [SYSTEM_PROMPT, companyInfoContext, catalogContext, extras.text]
     .filter(Boolean)
     .join('\n\n') + cartContext + iguazuExtraContext;
 
@@ -570,16 +572,25 @@ export async function handleIncoming(
 
         // Si es un error real (fechas pasadas, sin cabañas) → NO mostrar al cliente
         // "INSTRUCCIÓN" aparece también en el bloque normal, así que chequeamos frases de error
-if (dispBlock.includes('ya pasaron') || dispBlock.includes('ninguna cabaña admite')) {
+        if (dispBlock.includes('ya pasaron') || dispBlock.includes('ninguna cabaña admite')) {
           console.log(`[handler] DISPONIBILIDAD bloqueada (error): ${dispBlock.substring(0, 80)}...`);
           db.setReservationState(convo.id, serializeState({ step: 'disp_error', error: dispBlock } as any));
           finalReply = finalReply.replace(extractMatch[0], '');
         } else {
           // Es una lista real de cabañas → guardarla para el PRÓXIMO turno, NO inyectarla ahora
-          // (Paula ya respondió confirmando fechas, el usuario debe confirmar primero)
           console.log(`[handler] DISPONIBILIDAD generada — guardando para próximo turno`);
           db.setReservationState(convo.id, serializeState({ step: 'disp_ready', data: dispBlock } as any));
           finalReply = finalReply.replace(extractMatch[0], '');
+
+          // CRÍTICO: si Paula alucinó una lista de cabañas en este mismo turno ANTES de que
+          // el sistema inyectara DISPONIBILIDAD (hadDisponibilidad=false), reemplazamos su
+          // respuesta completa por un mensaje neutro. La lista real se mostrará en el PRÓXIMO turno.
+          // Si hadDisponibilidad=true, el bloque ya está inyectado y Paula tiene permiso para listar.
+          const listingPattern = /(?:^|\n)\s*-\s*(?:Studio|Lodge|Duplex)\s+\w+/m;
+          if (listingPattern.test(finalReply) && !extras.hadDisponibilidad) {
+            console.error('[handler] ⚠️ Paula alucinó lista de cabañas en turno SIN DISPONIBILIDAD inyectada — reemplazando por mensaje neutro');
+            finalReply = `Para ${personas} personas del ${ci} al ${co}, reviso opciones disponibles. Un momento, por favor.`;
+          }
         }
       } else {
         // Datos incompletos → solo quitamos el marker
@@ -763,16 +774,13 @@ if (dispBlock.includes('ya pasaron') || dispBlock.includes('ninguna cabaña admi
     await sleep(delayMs);
   }
 
-  insertMessage(convo.id, 'assistant', finalReply);
-
   // ── Guard de seguridad: NUNCA enviar texto interno al cliente ──────
   if (IS_IGUAZU) {
     // Guard 1: Paula listó cabañas sin DISPONIBILIDAD → reemplazar
     const listingPattern = /(?:^|\n)\s*-\s*(?:Studio|Lodge|Duplex)\s+\w+/m;
-    if (listingPattern.test(finalReply) && !finalReply.includes('DISPONIBILIDAD')) {
+    if (listingPattern.test(finalReply) && !extras.hadDisponibilidad) {
       console.error('[handler] ⚠️ Paula listó cabañas SIN bloque DISPONIBILIDAD — reemplazando respuesta');
       finalReply = 'Sí, tenemos opciones. Decime fechas de entrada y salida para revisar disponibilidad.';
-      insertMessage(convo.id, 'assistant', finalReply); // reemplazar en DB también
     }
 
     // Guard 2: texto interno colado
@@ -785,6 +793,7 @@ if (dispBlock.includes('ya pasaron') || dispBlock.includes('ninguna cabaña admi
     }
   }
 
+  insertMessage(convo.id, 'assistant', finalReply);
   await provider.sendMessage(msg.from, finalReply);
   console.log(`[handler] -> Enviado a ${msg.from}`);
 
