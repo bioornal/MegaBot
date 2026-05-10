@@ -156,6 +156,16 @@ async function buildIguazufallsExtras(
     return { text: blocks.join('\n\n'), hadDisponibilidad };
   }
 
+  // === Instrucción cuando esperamos comprobante pero el cliente mandó TEXTO ===
+  if (state?.step === 'awaiting_receipt' && !msg.mediaUrl) {
+    console.log('[handler] awaiting_receipt + mensaje de texto sin imagen — recordando comprobante');
+    blocks.push(
+      'INSTRUCCIÓN PARA PAULA: Estamos esperando el comprobante de pago (una imagen/foto de la transferencia). ' +
+      'El cliente todavía NO envió el comprobante. NO digas "comprobante recibido", "comprobante verificado" ni "reserva confirmada". ' +
+      'Respondé de forma natural a lo que escribió, y si es apropiado, recordale amablemente que envíe la captura del pago.'
+    );
+  }
+
   // === Caso COMPROBANTE ===
   if (intent.intent === 'receipt' && msg.mediaUrl) {
     // Sub-caso A: hay una reserva activa esperando comprobante
@@ -807,21 +817,6 @@ export async function handleIncoming(
           sena,
         });
         console.log(`[handler] ✅ Reserva auto-creada: ${cabana.nombre} ${ci}→${co} ${personas}p — eventId=${r.event_id}`);
-
-        // Guardar en Google Sheets como PENDIENTE
-        appendReservationRow({
-          fechaConfirmacion: new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),
-          nombre: nombre ?? 'Huésped',
-          telefono: telefono,
-          cabana: cabana.nombre,
-          checkIn: ci,
-          checkOut: co,
-          personas: personas,
-          total: total,
-          sena: sena,
-          noches: noches > 0 ? noches : 1,
-          estado: 'PENDIENTE',
-        });
 
         // Reemplazar el marker con confirmación natural en la respuesta
         const confirmText = `Reserva pre-cargada en el calendario. Total: $${total.toLocaleString('es-AR')} | Seña 50%: $${sena.toLocaleString('es-AR')}. Esperamos el comprobante para confirmar.`;
