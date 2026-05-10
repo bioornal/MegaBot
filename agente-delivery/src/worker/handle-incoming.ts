@@ -10,7 +10,7 @@ import { randomDelayMs, sleep, humanDelayMs } from '../lib/delay';
 import { getCart, clearCart, calculateTotal, addToCart, removeFromCart, updateItemQty, parseCartFromLLMReply, applyUserCartCorrections, canonicalName, setOrderType, generateTotalReply, syncPrices, arePricesLoaded, type Cart } from '../lib/cart';
 import type { WhatsAppProvider, IncomingMessage } from '../providers/types';
 import { getTenantById } from '../tenants.config';
-import { detectIntent } from '../lib/intent-iguazufalls';
+import { detectIntent, extractDateRange, extractPeople } from '../lib/intent-iguazufalls';
 import { findCabanasByCapacity, fetchCabanas, getCabanaByName } from '../lib/catalog';
 import { checkAvailability, createReservationEvent, updateReservationEvent } from '../lib/calendar-gcal';
 import { getSeason } from '../lib/season';
@@ -51,6 +51,8 @@ const {
   getRecentHistory,
   setMode,
   clearMessages,
+  getDateMemory,
+  setDateMemory,
 } = db;
 console.log(`[handler] Tenant: ${_tenant.id} | DB: ${_tenant.dataDir}`);
 
@@ -607,9 +609,30 @@ export async function handleIncoming(
         const m = raw.match(new RegExp(`${key}\\s*=\\s*([^\\s]+)`, 'i'));
         return m ? m[1].trim() : null;
       };
-      const pRaw = getParam('personas');
-      const ci = getParam('ci');
-      const co = getParam('co');
+      let pRaw = getParam('personas');
+      let ci = getParam('ci');
+      let co = getParam('co');
+
+      // ── Memoria de fechas: recuperar datos parciales de turnos anteriores ──
+      const dateMemJson = getDateMemory(convo.id);
+      const dateMem = dateMemJson ? JSON.parse(dateMemJson) as { personas?: number; ci?: string; co?: string } : {};
+
+      if ((!pRaw || pRaw === '?') && dateMem.personas) { pRaw = String(dateMem.personas); }
+      if ((!ci || ci === '?') && dateMem.ci) { ci = dateMem.ci; }
+      if ((!co || co === '?') && dateMem.co) { co = dateMem.co; }
+
+      // ── Fallback silencioso: extraer fechas del mensaje ACTUAL del cliente ──
+      // Si el LLM no logró capturar fechas, intentamos parsear el texto original del cliente
+      const clientDates = extractDateRange(msg.text ?? '');
+      if (clientDates) {
+        if (!ci || ci === '?') { ci = clientDates.ci; }
+        if (!co || co === '?') { co = clientDates.co; }
+      }
+      const clientPeople = extractPeople(msg.text ?? '');
+      if (clientPeople && (!pRaw || pRaw === '?')) {
+        pRaw = String(clientPeople);
+      }
+
       const personas = pRaw && pRaw !== '?' ? parseInt(pRaw, 10) : null;
 
       if (personas && ci && co && ci !== '?' && co !== '?' &&
@@ -618,8 +641,10 @@ export async function handleIncoming(
         console.log(`[handler] EXTRAC_DATOS: ${personas}p ${ci}→${co} — consultando disponibilidad...`);
         const dispBlock = await generateDisponibilidad(personas, ci, co);
 
+        // Guardar datos completos en memoria para futuros turnos
+        setDateMemory(convo.id, JSON.stringify({ personas, ci, co }));
+
         // Si es un error real (fechas pasadas, sin cabañas) → NO mostrar al cliente
-        // "INSTRUCCIÓN" aparece también en el bloque normal, así que chequeamos frases de error
         if (dispBlock.includes('ya pasaron') || dispBlock.includes('ninguna cabaña admite')) {
           console.log(`[handler] DISPONIBILIDAD bloqueada (error): ${dispBlock.substring(0, 80)}...`);
           db.setReservationState(convo.id, serializeState({ step: 'disp_error', error: dispBlock } as any));
@@ -633,7 +658,6 @@ export async function handleIncoming(
           // CRÍTICO: si Paula alucinó una lista de cabañas en este mismo turno ANTES de que
           // el sistema inyectara DISPONIBILIDAD (hadDisponibilidad=false), reemplazamos su
           // respuesta completa por un mensaje neutro. La lista real se mostrará en el PRÓXIMO turno.
-          // Si hadDisponibilidad=true, el bloque ya está inyectado y Paula tiene permiso para listar.
           const listingPattern = /(?:^|\n)\s*-\s*(?:Studio|Lodge|Duplex)\s+\w+/m;
           if (listingPattern.test(finalReply) && !extras.hadDisponibilidad) {
             console.error('[handler] ⚠️ Paula alucinó lista de cabañas en turno SIN DISPONIBILIDAD inyectada — reemplazando por mensaje neutro');
@@ -641,8 +665,15 @@ export async function handleIncoming(
           }
         }
       } else {
-        // Datos incompletos → solo quitamos el marker
-        console.log(`[handler] EXTRAC_DATOS incompleto (p=${pRaw} ci=${ci} co=${co}) — eliminando marker`);
+        // Datos incompletos → guardar lo que SÍ tenemos para el próximo turno
+        const partial: any = {};
+        if (personas) partial.personas = personas;
+        if (ci && ci !== '?') partial.ci = ci;
+        if (co && co !== '?') partial.co = co;
+        if (Object.keys(partial).length > 0) {
+          setDateMemory(convo.id, JSON.stringify({ ...dateMem, ...partial }));
+          console.log(`[handler] EXTRAC_DATOS incompleto — guardado en memoria:`, partial);
+        }
         finalReply = finalReply.replace(extractMatch[0], '');
       }
     }
