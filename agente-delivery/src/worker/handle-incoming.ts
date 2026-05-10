@@ -154,57 +154,95 @@ async function buildIguazufallsExtras(
   }
 
   // === Caso COMPROBANTE ===
-  if (intent.intent === 'receipt' && state?.step === 'awaiting_receipt' && msg.mediaUrl && state.sena) {
-    let receiptOk = false;
-    let tag = 'UNREADABLE';
-    let detail = 'error técnico al analizar';
+  if (intent.intent === 'receipt' && msg.mediaUrl) {
+    // Sub-caso A: hay una reserva activa esperando comprobante
+    if (state?.step === 'awaiting_receipt' && state.sena) {
+      let receiptOk = false;
+      let tag = 'UNREADABLE';
+      let detail = 'error técnico al analizar';
 
-    if (isBypassActive()) {
-      // Modo test: aceptar cualquier imagen sin verificar
-      receiptOk = true;
-      tag = 'OK';
-      detail = 'bypass activo — verificación omitida (modo test)';
-      console.log('[handler] Bypass activo → comprobante aceptado sin verificar');
-    } else {
-      try {
-        const result = await verifyPaymentReceipt({
-          imageUrl: msg.mediaUrl,
-          expectedAmount: state.sena,
-          bankAlias: process.env.BANK_ALIAS ?? 'iguazufalls.test',
-          bankCBU: process.env.BANK_CBU ?? '',
-          bankTitular: process.env.BANK_TITULAR ?? 'IguazuFalls',
-        });
-        receiptOk = result.ok;
-        tag = result.ok
-          ? 'OK'
-          : result.issue === 'wrong_account' ? 'WRONG_ACCOUNT'
-          : result.issue === 'amount_mismatch' ? 'AMOUNT_MISMATCH'
-          : 'UNREADABLE';
-        detail = 'detail' in result ? result.detail : 'verificado';
-      } catch {
-        tag = 'UNREADABLE';
-        detail = 'error técnico al analizar';
+      if (isBypassActive()) {
+        // Modo test: aceptar cualquier imagen sin verificar
+        receiptOk = true;
+        tag = 'OK';
+        detail = 'bypass activo — verificación omitida (modo test)';
+        console.log('[handler] Bypass activo → comprobante aceptado sin verificar');
+      } else {
+        try {
+          const result = await verifyPaymentReceipt({
+            imageUrl: msg.mediaUrl,
+            expectedAmount: state.sena,
+            bankAlias: process.env.BANK_ALIAS ?? 'iguazufalls.test',
+            bankCBU: process.env.BANK_CBU ?? '',
+            bankTitular: process.env.BANK_TITULAR ?? 'IguazuFalls',
+          });
+          receiptOk = result.ok;
+          tag = result.ok
+            ? 'OK'
+            : result.issue === 'wrong_account' ? 'WRONG_ACCOUNT'
+            : result.issue === 'amount_mismatch' ? 'AMOUNT_MISMATCH'
+            : 'UNREADABLE';
+          detail = 'detail' in result ? result.detail : 'verificado';
+        } catch {
+          tag = 'UNREADABLE';
+          detail = 'error técnico al analizar';
+        }
+      }
+
+      if (receiptOk) {
+        // Comprobante válido → confirmar en Calendar y marcar como completado
+        let calendarUpdated = false;
+        if (state.calendar_id && state.event_id) {
+          try {
+            await updateReservationEvent(
+              state.calendar_id,
+              state.event_id,
+              'confirmed',
+              state.huesped_nombre ?? 'Huésped',
+              state.personas ?? 1,
+            );
+            const completed: ReservationState = { ...state, step: 'completed' };
+            db.setReservationState(conversationId, serializeState(completed));
+            console.log(`[handler] Evento Calendar confirmado: ${state.event_id}`);
+            calendarUpdated = true;
+          } catch (e) {
+            console.error('[handler] Error confirmando evento en Calendar:', e);
+          }
+        }
+        if (calendarUpdated) {
+          blocks.push(`COMPROBANTE: OK\nDetalle: ${detail}\nLA RESERVA YA ESTÁ CONFIRMADA. El evento en el calendario pasó de PENDIENTE a CONFIRMADO. Decile al cliente EXACTAMENTE: "Comprobante recibido y verificado. ¡Reserva confirmada! Cualquier consulta estamos a disposición." NO digas "en breve" ni "el equipo va a confirmar" — ya está confirmado.`);
+        } else {
+          // Verificación OK pero falló la actualización del Calendar — no mentir al cliente
+          blocks.push(
+            `INSTRUCCIÓN PARA PAULA: El comprobante se verificó correctamente, pero hubo un error técnico al actualizar el calendario. ` +
+            `Decile al cliente: "Comprobante recibido, gracias. En un momento el equipo confirma la reserva." ` +
+            `NO digas que ya está confirmada. La reserva sigue pendiente de confirmación manual.`
+          );
+        }
+        return { text: blocks.join('\n\n'), hadDisponibilidad };
+      } else {
+        // Comprobante rechazado → mantener awaiting_receipt, NO tocar Calendar
+        console.log(`[handler] Comprobante rechazado (${tag}) — estado permanece awaiting_receipt`);
+        let instruction = '';
+        if (tag === 'WRONG_ACCOUNT') {
+          instruction = `INSTRUCCIÓN PARA PAULA: El comprobante que mandó el cliente NO tiene la cuenta de destino correcta. Decile amablemente que revise los datos de transferencia que le pasaste y que reenvíe el comprobante correcto. NO digas que la reserva está confirmada. La reserva sigue pendiente de seña.`;
+        } else if (tag === 'AMOUNT_MISMATCH') {
+          instruction = `INSTRUCCIÓN PARA PAULA: El monto del comprobante NO coincide con la seña de $${state.sena?.toLocaleString('es-AR')}. Decile amablemente que revise el monto y que reenvíe el comprobante con el importe correcto. NO digas que la reserva está confirmada. La reserva sigue pendiente de seña.`;
+        } else {
+          instruction = `INSTRUCCIÓN PARA PAULA: No se pudo leer el comprobante (imagen borrosa o ilegible). Pedile amablemente al cliente que reenvíe una foto clara del comprobante. NO digas que la reserva está confirmada. La reserva sigue pendiente de seña.`;
+        }
+        blocks.push(instruction);
+        return { text: blocks.join('\n\n'), hadDisponibilidad };
       }
     }
 
-    if (receiptOk && state.calendar_id && state.event_id) {
-      try {
-        await updateReservationEvent(
-          state.calendar_id,
-          state.event_id,
-          'confirmed',
-          state.huesped_nombre ?? 'Huésped',
-          state.personas ?? 1,
-        );
-        const completed: ReservationState = { ...state, step: 'completed' };
-        db.setReservationState(conversationId, serializeState(completed));
-        console.log(`[handler] Evento Calendar confirmado: ${state.event_id}`);
-      } catch (e) {
-        console.error('[handler] Error confirmando evento en Calendar:', e);
-      }
-    }
-
-    blocks.push(`COMPROBANTE: ${tag}\nDetalle: ${detail}\nLA RESERVA YA ESTÁ CONFIRMADA. El evento en el calendario pasó de PENDIENTE a CONFIRMADO. Decile al cliente EXACTAMENTE: "Comprobante recibido y verificado. ¡Reserva confirmada! Cualquier consulta estamos a disposición." NO digas "en breve" ni "el equipo va a confirmar" — ya está confirmado.`);
+    // Sub-caso B: llegó imagen pero NO hay reserva en awaiting_receipt
+    console.log('[handler] Imagen recibida sin reserva awaiting_receipt — informando al LLM');
+    blocks.push(
+      'INSTRUCCIÓN PARA PAULA: El cliente envió una imagen pero no hay ninguna reserva pendiente de pago en esta conversación. ' +
+      'Respondé amablemente que no tenés una reserva activa esperando comprobante, y preguntá si necesita ayuda con algo más. ' +
+      'Si quiere hacer una reserva, pedile fechas y cantidad de personas.'
+    );
     return { text: blocks.join('\n\n'), hadDisponibilidad };
   }
 
@@ -526,10 +564,11 @@ export async function handleIncoming(
     }
   }
 
-  // Si el sistema ya verificó el comprobante (bloque COMPROBANTE: presente),
-  // no pasamos la imagen al LLM — la decisión ya está tomada en texto.
-  // Esto también evita que un URL de imagen roto/expirado crashee el handler.
-  if (extras.text.includes('COMPROBANTE:')) {
+  // Si el cliente mandó una imagen en IguazuFalls, no pasamos la imagen al LLM —
+  // el handler ya procesó el comprobante (o determinó que no hay reserva activa)
+  // e inyectó el resultado como texto. Esto evita que un URL de imagen
+  // roto/expirado crashee el handler.
+  if (IS_IGUAZU && msg.mediaUrl) {
     for (const m of llmMessages) {
       if (typeof m.content !== 'string' && Array.isArray(m.content)) {
         m.content = '[comprobante recibido]';
@@ -549,6 +588,15 @@ export async function handleIncoming(
   console.log(`[handler] LLM reply: "${reply.substring(0, 200)}..."`);
 
   let finalReply = reply;
+
+  // Strip Chain-of-Thought razonamiento interno (<think>...</think>) — solo IguazuFalls
+  if (IS_IGUAZU) {
+    const thinkMatch = finalReply.match(/<think>[\s\S]*?<\/think>/);
+    if (thinkMatch) {
+      console.log(`[handler] CoT strippeado (${thinkMatch[0].length} chars)`);
+      finalReply = finalReply.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+    }
+  }
 
   // === IguazuFalls: LLM extrae datos estructurados → consultamos Calendar ===
   if (IS_IGUAZU) {
