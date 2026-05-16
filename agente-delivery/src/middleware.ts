@@ -8,7 +8,8 @@ export function middleware(request: NextRequest) {
   const isPublic =
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth') ||
-    pathname.startsWith('/menu')
+    pathname.startsWith('/menu') ||
+    pathname.startsWith('/api/webhook/twilio')
 
   if (isPublic) return NextResponse.next()
 

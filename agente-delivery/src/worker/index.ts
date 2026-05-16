@@ -70,6 +70,52 @@ async function main() {
       return;
     }
 
+    // Endpoint para providers webhook (Twilio, YCloud, etc.)
+    // Llamado por la API route de Next.js cuando llega un webhook.
+    // Body: { from: string, text: string, senderName?: string }
+    if (req.method === 'POST' && req.url === '/incoming') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { from, text, senderName } = JSON.parse(body) as {
+            from: string;
+            text: string;
+            senderName?: string;
+          };
+          if (!from || !text) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'from y text son requeridos' }));
+            return;
+          }
+          const msg = {
+            from,
+            text,
+            senderName: senderName ?? from,
+            fromMe: false,
+            isSelfChat: false,
+            mediaUrl: undefined as string | undefined,
+            provider: providerName,
+            externalMessageId: `webhook-${Date.now()}`,
+            to: process.env.TWILIO_WHATSAPP_FROM ?? process.env.TENANT_PHONE_NUMBER ?? '',
+            timestamp: Math.floor(Date.now() / 1000),
+            rawPayload: { from, text },
+          };
+          // Fire-and-forget: responde 200 de inmediato para no bloquear el webhook
+          handleIncoming(msg, provider as any).catch((err: unknown) =>
+            console.error('[worker] Error en handleIncoming (webhook):', err)
+          );
+          res.writeHead(200);
+          res.end(JSON.stringify({ ok: true }));
+        } catch (err) {
+          console.error('[worker] Error en POST /incoming:', err);
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: String(err) }));
+        }
+      });
+      return;
+    }
+
     // Endpoint de test: inyecta un mensaje entrante directamente al handler
     // Para probar sin WhatsApp. Body: { from: string, text: string, senderName?: string }
     if (req.method === 'POST' && req.url === '/test-inject') {

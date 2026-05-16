@@ -22,6 +22,7 @@ export interface Tenant {
   productsTable: string
   companyInfoTable: string
   dataSource?: 'supabase' | 'insforge'
+  twilioPhoneNumber?: string
   theme: TenantTheme
 }
 
@@ -75,6 +76,7 @@ export const TENANTS: Tenant[] = [
     productsTable: 'productos',
     companyInfoTable: 'info_empresa_impasto',
     dataSource: 'insforge',
+    twilioPhoneNumber: '+14155238886',
     theme: {
       primary:   '#60a5fa',
       accent:    '#2563eb',

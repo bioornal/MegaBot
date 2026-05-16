@@ -1,4 +1,4 @@
-export type ProviderName = 'baileys' | 'ycloud' | 'meta';
+export type ProviderName = 'baileys' | 'ycloud' | 'meta' | 'twilio';
 
 export type ProviderStatus =
   | 'connecting'
